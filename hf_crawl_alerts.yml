@@ -1,0 +1,50 @@
+# HF Crawl Alert Rules
+# Place this file where Prometheus can load it (see rule_files in prometheus.yml)
+
+groups:
+  - name: hf_crawl_alerts
+    rules:
+      - alert: HighRateLimitHits
+        expr: rate(hf_crawl_rate_limit_hits_total[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High rate limit hits on {{ $labels.endpoint }}"
+          description: "HF Crawl is hitting rate limits on {{ $labels.endpoint }} at {{ $value }} hits/sec. Consider reducing request rate."
+
+      - alert: LowDiskSpace
+        expr: hf_crawl_disk_free_bytes < 10737418240
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Low disk space on HF Crawl machine"
+          description: "Disk space is below 10 GB ({{ $value | humanize }}). Crawl may fail."
+
+      - alert: PhaseStuck
+        expr: delta(hf_crawl_phase_progress_pct[30m]) == 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Phase {{ $labels.phase }} appears stuck"
+          description: "No progress in phase {{ $labels.phase }} for 30 minutes. Check logs."
+
+      - alert: HighErrorRate
+        expr: rate(hf_crawl_models_fetched_total{status="error"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate in phase {{ $labels.phase }}"
+          description: "Error rate is {{ $value }} errors/sec in phase {{ $labels.phase }}."
+
+      - alert: CrawlDown
+        expr: up{job="hf-crawl"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HF Crawl metrics endpoint is down"
+          description: "Prometheus cannot scrape HF Crawl metrics. The crawler may have crashed."

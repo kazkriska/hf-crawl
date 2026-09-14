@@ -1,0 +1,58 @@
+version: "3.8"
+
+# HF Crawl — Plug-n-Play Docker Compose
+# Usage:
+#   HF_TOKEN=hf_xxx docker compose up -d
+#   docker compose logs -f hf-crawl
+#   docker compose exec hf-crawl hf-crawl web
+#   docker compose exec hf-crawl hf-crawl shell
+
+services:
+  hf-crawl:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hf-crawl:latest
+    container_name: hf-crawl
+    restart: unless-stopped
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+      - HF_CRAWL_ENV=${HF_CRAWL_ENV:-dev}
+      - HF_CRAWL_MAX_ITEMS=${HF_CRAWL_MAX_ITEMS:-}
+      - HF_CRAWL_PORT=8000
+      - HF_CRAWL_WEB_PORT=8501
+    volumes:
+      # Data persistence
+      - hf-crawl-data:/app/data
+      - hf-crawl-logs:/app/logs
+      # Optional: mount a custom config
+      # - ./custom-config.yaml:/app/config/config.dev.yaml:ro
+    ports:
+      - "${HF_CRAWL_METRICS_PORT:-8000}:8000"  # Prometheus metrics
+      - "${HF_CRAWL_WEB_PORT:-8501}:8501"       # Web UI
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # Resource limits (adjust as needed)
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+volumes:
+  hf-crawl-data:
+    driver: local
+  hf-crawl-logs:
+    driver: local

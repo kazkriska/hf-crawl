@@ -1,0 +1,28 @@
+# Hugging Face Hub paths (can be very large)
+data/dev/model_cards.duckdb
+data/prod/model_cards.duckdb
+data/*/archive/
+data/*/checkpoint/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Logs
+logs/*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env

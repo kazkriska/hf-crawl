@@ -1,0 +1,536 @@
+{
+  "document_type": "handoff_context",
+  "format_version": "1.0",
+  "created_at": "2026-09-13",
+  "project": {
+    "name": "HF Crawl",
+    "location": "Projects/hf-crawl/",
+    "goal": "Fetch and store model cards for all ~1.8-2 million public models on Hugging Face Hub",
+    "status": "planning_complete_ready_for_implementation",
+    "phases": ["list", "info", "card"]
+  },
+  "decisions": [
+    {
+      "id": "d1",
+      "topic": "sort_parameter",
+      "decision": "createdAt ascending",
+      "rationale": "Immutable field, stable page ordering, new models append to end",
+      "alternatives_rejected": ["lastModified (mutable, causes mid-crawl shifts)"]
+    },
+    {
+      "id": "d2",
+      "topic": "pipeline_architecture",
+      "decision": "3-phase: list -> info -> card",
+      "rationale": "Separation of concerns, parallelizable, re-runnable"
+    },
+    {
+      "id": "d3",
+      "topic": "database_engine",
+      "decision": "DuckDB",
+      "rationale": "Single-file, columnar, compressed, fast analytics"
+    },
+    {
+      "id": "d4",
+      "topic": "table_design",
+      "decision": "3 tables with FK chain",
+      "rationale": "Normalized, no sparse columns, clean joins"
+    },
+    {
+      "id": "d5",
+      "topic": "phase_gating",
+      "decision": "Phase 2 at 25%, Phase 3 at 100%",
+      "rationale": "Early info crawl, cards only after full info"
+    },
+    {
+      "id": "d6",
+      "topic": "orchestrator",
+      "decision": "Central coordinator",
+      "rationale": "Single entry point, signal handling, metrics, health"
+    },
+    {
+      "id": "d7",
+      "topic": "concurrency",
+      "decision": "Asyncio, semaphore-controlled",
+      "rationale": "I/O bound, single IP, safe for HF rate limits"
+    },
+    {
+      "id": "d8",
+      "topic": "metrics",
+      "decision": "Prometheus /metrics endpoint",
+      "rationale": "Integrates with existing Grafana server"
+    },
+    {
+      "id": "d9",
+      "topic": "dev_prod_isolation",
+      "decision": "Separate DB files",
+      "rationale": "Clean slate for prod, test data never pollutes"
+    },
+    {
+      "id": "d10",
+      "topic": "testing_strategy",
+      "decision": "Smoke (50 items) + Dev (500 items)",
+      "rationale": "Full code path verification before prod"
+    },
+    {
+      "id": "d11",
+      "topic": "incremental_updates",
+      "decision": "lastModified polling + ETag",
+      "rationale": "Post-crawl freshness without full re-crawl"
+    },
+    {
+      "id": "d12",
+      "topic": "resumability",
+      "decision": "Per-phase checkpoints",
+      "rationale": "Re-runnable after crashes, no duplicate work"
+    }
+  ],
+  "database_schema": {
+    "models_list": {
+      "description": "Phase 1 output",
+      "columns": [
+        {"name": "model_id", "type": "VARCHAR", "constraint": "PRIMARY KEY"},
+        {"name": "author", "type": "VARCHAR"},
+        {"name": "created_at", "type": "TIMESTAMP"},
+        {"name": "last_modified", "type": "TIMESTAMP"},
+        {"name": "downloads", "type": "BIGINT", "default": 0},
+        {"name": "downloads_all_time", "type": "BIGINT", "default": 0},
+        {"name": "likes", "type": "INTEGER", "default": 0},
+        {"name": "trending_score", "type": "FLOAT"},
+        {"name": "pipeline_tag", "type": "VARCHAR"},
+        {"name": "library_name", "type": "VARCHAR"},
+        {"name": "tags", "type": "JSON"},
+        {"name": "etag", "type": "VARCHAR"},
+        {"name": "fetched_at", "type": "TIMESTAMP"},
+        {"name": "list_page", "type": "INTEGER"},
+        {"name": "list_cursor", "type": "VARCHAR"},
+        {"name": "fetch_status", "type": "VARCHAR", "default": "success"}
+      ]
+    },
+    "model_info": {
+      "description": "Phase 2 output",
+      "columns": [
+        {"name": "model_id", "type": "VARCHAR", "constraint": "PRIMARY KEY"},
+        {"name": "sha", "type": "VARCHAR"},
+        {"name": "card_data", "type": "JSON"},
+        {"name": "base_models", "type": "JSON"},
+        {"name": "datasets", "type": "JSON"},
+        {"name": "config", "type": "JSON"},
+        {"name": "eval_results", "type": "JSON"},
+        {"name": "gguf", "type": "JSON"},
+        {"name": "safetensors", "type": "JSON"},
+        {"name": "transformers_info", "type": "JSON"},
+        {"name": "siblings", "type": "JSON"},
+        {"name": "used_storage", "type": "BIGINT"},
+        {"name": "gated", "type": "VARCHAR"},
+        {"name": "disabled", "type": "BOOLEAN", "default": false},
+        {"name": "etag", "type": "VARCHAR"},
+        {"name": "fetched_at", "type": "TIMESTAMP"},
+        {"name": "fetch_status", "type": "VARCHAR", "default": "success"},
+        {"name": "fetch_error", "type": "TEXT"}
+      ],
+      "foreign_key": "model_id -> models_list.model_id"
+    },
+    "model_card": {
+      "description": "Phase 3 output",
+      "columns": [
+        {"name": "model_id", "type": "VARCHAR", "constraint": "PRIMARY KEY"},
+        {"name": "readme_raw", "type": "TEXT"},
+        {"name": "readme_size", "type": "INTEGER"},
+        {"name": "yaml_metadata", "type": "JSON"},
+        {"name": "content_hash", "type": "VARCHAR"},
+        {"name": "etag", "type": "VARCHAR"},
+        {"name": "fetched_at", "type": "TIMESTAMP"},
+        {"name": "fetch_status", "type": "VARCHAR", "default": "success"},
+        {"name": "fetch_error", "type": "TEXT"}
+      ],
+      "foreign_key": "model_id -> models_list.model_id"
+    }
+  },
+  "prometheus_metrics": {
+    "counters": [
+      {"name": "hf_crawl_models_fetched_total", "labels": ["phase", "status"]},
+      {"name": "hf_crawl_requests_total", "labels": ["endpoint", "status_code"]},
+      {"name": "hf_crawl_rate_limit_hits_total", "labels": ["endpoint"]}
+    ],
+    "gauges": [
+      {"name": "hf_crawl_phase_progress_pct", "labels": ["phase"]},
+      {"name": "hf_crawl_phase_status", "labels": ["phase"]},
+      {"name": "hf_crawl_rate_limit_remaining", "labels": ["bucket"]},
+      {"name": "hf_crawl_db_size_bytes", "labels": []},
+      {"name": "hf_crawl_disk_free_bytes", "labels": []},
+      {"name": "hf_crawl_active_workers", "labels": ["phase"]},
+      {"name": "hf_crawl_throughput_models_per_second", "labels": ["phase"]}
+    ],
+    "histograms": [
+      {"name": "hf_crawl_request_duration_seconds", "labels": ["endpoint", "status_code"]},
+      {"name": "hf_crawl_batch_commit_duration_seconds", "labels": ["phase"]}
+    ]
+  },
+  "grafana_dashboard": {
+    "panels": [
+      "Phase Progress (Gauge x3)",
+      "Phase Status (Stat)",
+      "Throughput (Time Series)",
+      "Total Fetched (Counter)",
+      "Request Rate (Time Series by status_code)",
+      "Rate Limit Remaining (Gauge)",
+      "Request Latency (Heatmap)",
+      "DB Size (Time Series)",
+      "Disk Space (Gauge)",
+      "Active Workers (Time Series)",
+      "Error Rate (Time Series)"
+    ],
+    "alerts": [
+      {"name": "HighRateLimitHits", "condition": "rate(rate_limit_hits_total[5m]) > 5", "severity": "warning"},
+      {"name": "LowDiskSpace", "condition": "disk_free_bytes < 10GB", "severity": "critical"},
+      {"name": "PhaseStuck", "condition": "delta(phase_progress_pct[30m]) == 0", "severity": "warning"}
+    ]
+  },
+  "huggingface_api": {
+    "endpoints": {
+      "list_models": "GET /api/models",
+      "model_info": "GET /api/models/{model_id}",
+      "model_card": "GET /{model_id}/raw/main/README.md"
+    },
+    "list_models_parameters": {
+      "sort": "createdAt (for initial crawl)",
+      "direction": "1 (ascending)",
+      "limit": "1000 (page size)",
+      "cursor": "server-generated, base64-encoded"
+    },
+    "rate_limits_per_5min": {
+      "anonymous": {"api": 500, "resolvers": 3000, "pages": 100},
+      "free": {"api": 1000, "resolvers": 5000, "pages": 200},
+      "pro": {"api": 2500, "resolvers": 12000, "pages": 400},
+      "enterprise": {"api": 6000, "resolvers": 50000, "pages": 600}
+    },
+    "safe_rates": {
+      "phase1_api": "2-3 req/sec",
+      "phase2_api": "2-3 req/sec",
+      "phase3_resolvers": "10-20 req/sec",
+      "max_concurrent": 5
+    },
+    "retry_strategy": {
+      "429": "Parse RateLimit header, wait exact seconds, retry",
+      "5xx": "Exponential backoff (1,2,4,8, max 60s) + jitter",
+      "404": "Mark deleted, skip",
+      "403": "Mark gated/private, skip",
+      "timeout": "Retry up to 3 times, then mark failed",
+      "connection_reset": "Retry with backoff",
+      "max_retries": 5
+    }
+  },
+  "project_structure": {
+    "directories": [
+      "config/",
+      "data/dev/",
+      "data/prod/",
+      "src/phases/",
+      "src/components/",
+      "tests/",
+      "logs/",
+      "grafana/"
+    ],
+    "files": [
+      "README.md",
+      "ACTION_PLAN.md",
+      "config/config.dev.yaml",
+      "config/config.prod.yaml",
+      "src/main.py",
+      "src/orchestrator.py",
+      "src/config.py",
+      "src/phases/base.py",
+      "src/phases/phase1_list.py",
+      "src/phases/phase2_info.py",
+      "src/phases/phase3_card.py",
+      "src/components/fetcher.py",
+      "src/components/parser.py",
+      "src/components/checkpoint.py",
+      "src/components/storage.py",
+      "src/components/rate_limiter.py",
+      "src/metrics.py",
+      "src/utils.py",
+      "tests/test_smoke.py",
+      "tests/test_dev.py",
+      "tests/test_integration.py",
+      "tests/conftest.py",
+      "grafana/dashboard.json",
+      "prometheus.yml",
+      "requirements.txt"
+    ]
+  },
+  "config_files": {
+    "dev": {
+      "environment": "dev",
+      "huggingface": {
+        "token": "${HF_TOKEN}",
+        "base_url": "https://huggingface.co",
+        "sort_field": "createdAt",
+        "sort_direction": 1,
+        "page_size": 1000
+      },
+      "rate_limiting": {
+        "max_requests_per_second": 3,
+        "max_concurrent_requests": 5,
+        "max_retries": 5,
+        "backoff_base_seconds": 1.0,
+        "backoff_max_seconds": 60.0
+      },
+      "phase_gating": {
+        "phase2_start_threshold_pct": 25,
+        "phase3_start_threshold_pct": 100
+      },
+      "storage": {
+        "duckdb_path": "./data/dev/model_cards.duckdb",
+        "jsonl_archive_dir": "./data/dev/archive"
+      },
+      "checkpoint": {
+        "dir": "./data/dev/checkpoint",
+        "save_every_n_pages": 1
+      },
+      "logging": {
+        "level": "INFO",
+        "file": "./logs/dev.log",
+        "progress_every_n_models": 100
+      },
+      "metrics": {
+        "enabled": true,
+        "port": 8000
+      }
+    },
+    "prod": {
+      "environment": "prod",
+      "huggingface": {
+        "token": "${HF_TOKEN}",
+        "base_url": "https://huggingface.co",
+        "sort_field": "createdAt",
+        "sort_direction": 1,
+        "page_size": 1000
+      },
+      "rate_limiting": {
+        "max_requests_per_second": 3,
+        "max_concurrent_requests": 5,
+        "max_retries": 5,
+        "backoff_base_seconds": 1.0,
+        "backoff_max_seconds": 60.0
+      },
+      "phase_gating": {
+        "phase2_start_threshold_pct": 25,
+        "phase3_start_threshold_pct": 100
+      },
+      "storage": {
+        "duckdb_path": "./data/prod/model_cards.duckdb",
+        "jsonl_archive_dir": "./data/prod/archive"
+      },
+      "checkpoint": {
+        "dir": "./data/prod/checkpoint",
+        "save_every_n_pages": 1
+      },
+      "logging": {
+        "level": "INFO",
+        "file": "./logs/prod.log",
+        "progress_every_n_models": 1000
+      },
+      "metrics": {
+        "enabled": true,
+        "port": 8000
+      }
+    }
+  },
+  "cli_interface": {
+    "dev_full": "python src/main.py --phase all --max-items 500 --config config/config.dev.yaml",
+    "dev_smoke": "python src/main.py --phase all --max-items 50 --config config/config.dev.yaml",
+    "prod_smoke": "python src/main.py --phase list --max-items 50 --config config/config.prod.yaml",
+    "prod_list": "python src/main.py --phase list --config config/config.prod.yaml",
+    "prod_info": "python src/main.py --phase info --config config/config.prod.yaml",
+    "prod_card": "python src/main.py --phase card --config config/config.prod.yaml",
+    "resume": "python src/main.py --phase list --config config/config.prod.yaml"
+  },
+  "checkpoint_design": {
+    "files": {
+      "phase1_list": ["state.json", "failed_models.json"],
+      "phase2_info": ["state.json", "failed_models.json"],
+      "phase3_card": ["state.json", "failed_models.json"]
+    },
+    "resume_logic": [
+      "On startup, check for existing checkpoint",
+      "If exists -> resume from cursor/last_model_id",
+      "If not -> start from beginning",
+      "UPSERT ensures re-running doesn't create duplicates",
+      "last_modified / ETag checks skip unchanged models"
+    ]
+  },
+  "anti_spam_tos": {
+    "required_practices": [
+      "Always pass HF_TOKEN",
+      "Use descriptive User-Agent header",
+      "Respect RateLimit HTTP headers",
+      "Implement exponential backoff with jitter",
+      "Single IP, no distributed crawling",
+      "Conservative request rates (2-3 req/sec for API)"
+    ],
+    "tos_analysis": {
+      "model_cards_public": true,
+      "api_collection_not_prohibited": true,
+      "export_control_compliance_required": true,
+      "no_competing_platform": true,
+      "respect_rate_limits": true,
+      "recommendation": "Store for research/internal use only; give attribution to HF"
+    }
+  },
+  "storage_estimation": {
+    "models_list_gb": 5.4,
+    "model_info_gb": 9.0,
+    "model_card_gb": 36.0,
+    "total_raw_gb": 50.4,
+    "duckdb_compressed_gb": "25-30",
+    "jsonl_archive_compressed_gb": "20-25",
+    "total_with_overhead_gb": "50-60",
+    "recommended_free_disk_gb": 100
+  },
+  "cost_estimation": {
+    "hf_pro_monthly_usd": 9,
+    "compute": 0,
+    "storage": 0,
+    "total_monthly_usd": "0-9"
+  },
+  "task_list": {
+    "phase0_setup": [
+      {"id": "0.1", "task": "Create project directory structure", "status": "pending"},
+      {"id": "0.2", "task": "Set up Python virtual environment", "status": "pending"},
+      {"id": "0.3", "task": "Create requirements.txt", "status": "pending"},
+      {"id": "0.4", "task": "Create config/config.dev.yaml", "status": "pending"},
+      {"id": "0.5", "task": "Create config/config.prod.yaml", "status": "pending"},
+      {"id": "0.6", "task": "Create .gitignore", "status": "pending"},
+      {"id": "0.7", "task": "Create README.md", "status": "pending"}
+    ],
+    "phase1_core_components": [
+      {"id": "1.1", "task": "Implement Config loader class", "status": "pending"},
+      {"id": "1.2", "task": "Implement Fetcher HTTP client", "status": "pending"},
+      {"id": "1.3", "task": "Implement RateLimiter", "status": "pending"},
+      {"id": "1.4", "task": "Implement CheckpointManager", "status": "pending"},
+      {"id": "1.5", "task": "Implement Storage writer", "status": "pending"},
+      {"id": "1.6", "task": "Implement Parser utilities", "status": "pending"},
+      {"id": "1.7", "task": "Implement Logger setup", "status": "pending"},
+      {"id": "1.8", "task": "Implement Metrics definitions", "status": "pending"}
+    ],
+    "phase2_orchestrator": [
+      {"id": "2.1", "task": "Implement Orchestrator class", "status": "pending"},
+      {"id": "2.2", "task": "Implement PhaseGovernor", "status": "pending"},
+      {"id": "2.3", "task": "Implement SignalHandler", "status": "pending"},
+      {"id": "2.4", "task": "Implement HealthChecker", "status": "pending"},
+      {"id": "2.5", "task": "Implement MetricsServer", "status": "pending"},
+      {"id": "2.6", "task": "Implement ProgressTracker", "status": "pending"}
+    ],
+    "phase3_phase_implementations": [
+      {"id": "3.1", "task": "Implement Phase1ListModelFetcher", "status": "pending"},
+      {"id": "3.2", "task": "Implement Phase2ModelInfoFetcher", "status": "pending"},
+      {"id": "3.3", "task": "Implement Phase3ModelCardFetcher", "status": "pending"},
+      {"id": "3.4", "task": "Wire phases into Orchestrator", "status": "pending"}
+    ],
+    "phase4_testing": [
+      {"id": "4.1", "task": "Create test fixtures and conftest.py", "status": "pending"},
+      {"id": "4.2", "task": "Write smoke test (50 items)", "status": "pending"},
+      {"id": "4.3", "task": "Write dev test (500 items)", "status": "pending"},
+      {"id": "4.4", "task": "Write integration test (full pipeline)", "status": "pending"},
+      {"id": "4.5", "task": "Run smoke test in dev", "status": "pending"},
+      {"id": "4.6", "task": "Run dev test in dev", "status": "pending"},
+      {"id": "4.7", "task": "Fix any bugs from tests", "status": "pending"}
+    ],
+    "phase5_deployment": [
+      {"id": "5.1", "task": "Run production smoke test (50 items)", "status": "pending"},
+      {"id": "5.2", "task": "Verify prod smoke test results", "status": "pending"},
+      {"id": "5.3", "task": "Remove --max-items cap", "status": "pending"},
+      {"id": "5.4", "task": "Start full production crawl", "status": "pending"},
+      {"id": "5.5", "task": "Monitor Grafana dashboard", "status": "pending"},
+      {"id": "5.6", "task": "Verify phase 1 completion", "status": "pending"},
+      {"id": "5.7", "task": "Start phase 2 (info)", "status": "pending"},
+      {"id": "5.8", "task": "Verify phase 2 completion", "status": "pending"},
+      {"id": "5.9", "task": "Start phase 3 (card)", "status": "pending"},
+      {"id": "5.10", "task": "Verify phase 3 completion", "status": "pending"}
+    ],
+    "phase6_monitoring": [
+      {"id": "6.1", "task": "Set up Prometheus scrape config", "status": "pending"},
+      {"id": "6.2", "task": "Import Grafana dashboard", "status": "pending"},
+      {"id": "6.3", "task": "Configure Grafana alerts", "status": "pending"},
+      {"id": "6.4", "task": "Implement incremental update script", "status": "pending"},
+      {"id": "6.5", "task": "Schedule daily incremental run", "status": "pending"},
+      {"id": "6.6", "task": "Set up log rotation", "status": "pending"},
+      {"id": "6.7", "task": "Document runbook", "status": "pending"}
+    ]
+  },
+  "dependencies": {
+    "python": ">=3.12",
+    "packages": [
+      "duckdb>=1.0.0",
+      "httpx>=0.27.0",
+      "pyyaml>=6.0",
+      "prometheus_client>=0.20.0",
+      "pydantic>=2.0",
+      "structlog>=24.0",
+      "tenacity>=8.0",
+      "click>=8.0"
+    ],
+    "system": {
+      "ram_gb": 4,
+      "disk_free_gb": 100,
+      "network": "stable internet connection",
+      "os": "Linux (tested on 6.8 kernel)"
+    }
+  },
+  "risks": [
+    {"risk": "HF changes API", "likelihood": "low", "impact": "high", "mitigation": "Abstract fetcher; easy to adapt"},
+    {"risk": "Rate limit ban", "likelihood": "low", "impact": "medium", "mitigation": "Conservative rates, backoff, auth token"},
+    {"risk": "Disk full", "likelihood": "medium", "impact": "high", "mitigation": "Monitor disk, alert at 10 GB free"},
+    {"risk": "Network outage", "likelihood": "medium", "impact": "low", "mitigation": "Auto-resume from checkpoint"},
+    {"risk": "DB corruption", "likelihood": "low", "impact": "high", "mitigation": "JSONL archive as backup"},
+    {"risk": "Code bug mid-crawl", "likelihood": "medium", "impact": "medium", "mitigation": "Dev testing, idempotent UPSERTs"},
+    {"risk": "HF ToS change", "likelihood": "low", "impact": "high", "mitigation": "Stay updated; data is public/research"}
+  ],
+  "success_criteria": [
+    {"criterion": "Phase 1 completion", "target": "100% of models_list table populated"},
+    {"criterion": "Phase 2 completion", "target": "100% of model_info table populated"},
+    {"criterion": "Phase 3 completion", "target": "100% of model_card table populated"},
+    {"criterion": "FK integrity", "target": "All info/card rows have valid list reference"},
+    {"criterion": "Data quality", "target": ">99.9% fetch success rate"},
+    {"criterion": "No rate limit bans", "target": "Zero IP-level bans"},
+    {"criterion": "Monitoring", "target": "Grafana dashboard fully functional"},
+    {"criterion": "Incremental updates", "target": "Daily delta crawl completes in <1 hour"}
+  ],
+  "timeline_estimate": {
+    "development_days": "6-9",
+    "phase1_crawl_days": 4,
+    "phase2_crawl_days": 4,
+    "phase3_crawl_days": 7,
+    "total_crawl_with_overlap_days": "10-12"
+  },
+  "open_questions": [
+    {"id": "q1", "question": "What percentage threshold for Phase 2 start?", "status": "decided", "resolution": "25%"},
+    {"id": "q2", "question": "Exact HF API createdAt behavior for pre-2022 models?", "status": "unknown", "resolution": "Monitor first pages"},
+    {"id": "q3", "question": "Need HF Enterprise token for higher limits?", "status": "evaluate_after_phase1", "resolution": "If 4/s is too slow, upgrade"},
+    {"id": "q4", "question": "Should we add environment column to rows?", "status": "optional", "resolution": "Can add later if needed"},
+    {"id": "q5", "question": "JSONL archive compression level?", "status": "tbd", "resolution": "Test gzip vs zstd"}
+  ],
+  "working_conventions": {
+    "delegation_policy": "Kevin handles all complex work in-session. Sub-agents only get atomic, fully-specified tasks with definite path to success.",
+    "testing_policy": "Smoke (50 items) + Dev (500 items) before prod. Separate DB files for dev/prod.",
+    "monitoring_policy": "Prometheus /metrics on port 8000, Grafana dashboard, alerts for rate limits/disk/stuck phases.",
+    "data_policy": "No model weights fetched. Model cards only. Research/internal use with HF attribution."
+  },
+  "files_created": [
+    {
+      "path": "Projects/hf-crawl/ACTION_PLAN.md",
+      "description": "Comprehensive action plan with 20 sections, 48-task checklist, all decisions documented"
+    },
+    {
+      "path": "Projects/hf-crawl/HF_CRAWL_CONTEXT.json",
+      "description": "This file - structured handoff context for AI session continuity"
+    }
+  ],
+  "next_steps": [
+    "Review and approve ACTION_PLAN.md",
+    "Begin Phase 0: Project Setup (directory structure, venv, requirements.txt)",
+    "Create config files (dev.yaml, prod.yaml)",
+    "Begin Phase 1: Core Components implementation"
+  ]
+}

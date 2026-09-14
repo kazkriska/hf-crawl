@@ -1,0 +1,42 @@
+environment: prod
+
+huggingface:
+  token: "${HF_TOKEN}"
+  base_url: "https://huggingface.co"
+  sort_field: "createdAt"
+  sort_direction: 1
+  page_size: 1000
+
+rate_limiting:
+  max_requests_per_second: 3
+  max_concurrent_requests: 5
+  max_retries: 5
+  backoff_base_seconds: 1.0
+  backoff_max_seconds: 60.0
+
+phase_gating:
+  phase2_start_threshold_pct: 25
+  phase3_start_threshold_pct: 100
+
+storage:
+  duckdb_path: "./data/prod/model_cards.duckdb"
+  jsonl_archive_dir: "./data/prod/archive"
+
+checkpoint:
+  dir: "./data/prod/checkpoint"
+  save_every_n_pages: 1
+
+logging:
+  level: "INFO"
+  file: "./logs/prod.log"
+  progress_every_n_models: 1000
+
+monitoring:
+  enabled: true
+  pushgateway_host: "192.168.1.11"
+  pushgateway_port: 9091
+  loki_host: "192.168.1.11"
+  loki_port: 3100
+  job_name: "hf-crawl"
+  instance_name: "prod"
+  push_interval_seconds: 30
