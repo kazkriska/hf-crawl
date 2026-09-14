@@ -46,10 +46,11 @@ class Storage:
         return self._db
 
     def start(self) -> None:
+        if self._db is not None:
+            return  # Already initialized
         os.makedirs(os.path.dirname(self._config.storage.duckdb_path), exist_ok=True)
         db_path = self._config.storage.duckdb_path
         # Clean stale lock files from previous crashed container
-        # DuckDB creates .wal and .lock files; if container crashes, these persist
         for suffix in [".wal", ".lock"]:
             stale_path = db_path + suffix
             if os.path.exists(stale_path):
@@ -58,7 +59,7 @@ class Storage:
                     logger.info("removed_stale_file", path=stale_path)
                 except OSError as e:
                     logger.warning("stale_file_remove_failed", path=stale_path, error=str(e))
-        self._db = duckdb.connect(db_path)
+        self._db = duckdb.connect(db_path, config={'access_mode': 'read_write'})
         self._create_tables()
         self._update_disk_metrics()
 
