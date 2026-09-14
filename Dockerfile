@@ -5,8 +5,8 @@ FROM python:3.12-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+  curl \
+  && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
@@ -23,8 +23,9 @@ COPY tests/ /app/tests/
 COPY grafana/ /app/grafana/
 COPY prometheus.yml /app/prometheus.yml
 COPY hf_crawl_alerts.yml /app/hf_crawl_alerts.yml
-COPY README.md /app/README.md
-COPY ACTION_PLAN.md /app/ACTION_PLAN.md
+COPY rate-limit-check.py /app/rate-limit-check.py
+#COPY README.md /app/README.md
+#COPY ACTION_PLAN.md /app/ACTION_PLAN.md
 
 
 # Create data and logs directories

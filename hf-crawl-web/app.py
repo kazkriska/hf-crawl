@@ -10,93 +10,101 @@ API_URL = os.environ.get("API_URL", "http://localhost:8001")
 
 # --- Sidebar ---
 st.sidebar.title("🤗 HF Crawl")
-page = st.sidebar.radio("Page", ["Overview", "Models by Pipeline", "Model Search", "Model Info", "Model Cards", "Raw SQL"])
+page = st.sidebar.radio("Page", ["Overview", "Pipeline Tags", "Model Search", "Model Info", "Model Cards", "Raw SQL"])
 
 # --- API Helper ---
-def api_get(path, params=None, timeout=30):
-    resp = requests.get(f"{API_URL}{path}", params=params, timeout=timeout)
-    return resp.json()
+@st.cache_data(ttl=30)
+def get_stats():
+    return requests.get(f"{API_URL}/stats", timeout=30).json()
 
-def api_post(path, json_data=None, timeout=30):
-    resp = requests.post(f"{API_URL}{path}", json=json_data, timeout=timeout)
-    return resp.json()
+@st.cache_data(ttl=30)
+def get_pipeline_tags():
+    return requests.post(f"{API_URL}/sql", json={
+        "query": "SELECT COALESCE(pipeline_tag, 'NULL/Unset') as tag, COUNT(*) as cnt FROM models_list GROUP BY COALESCE(pipeline_tag, 'NULL/Unset') ORDER BY cnt DESC"
+    }, timeout=30).json()
+
+def is_classification_tag(tag):
+    """Check if a tag indicates a classification type."""
+    classification_tags = [
+        'text-classification', 'image-classification', 'audio-classification',
+        'video-classification', 'token-classification', 'sentence-similarity',
+        'object-detection', 'image-segmentation', 'semantic-segmentation',
+        'instance-segmentation', 'panoptic-segmentation', 'depth-estimation',
+        'image-to-text', 'text-to-image', 'text-to-video', 'image-to-image',
+        'text-generation', 'text2text-generation', 'translation', 'summarization',
+        'conversational', 'question-answering', 'fill-mask', 'text-to-speech',
+        'automatic-speech-recognition', 'audio-to-audio', 'voice-activity-detection',
+        'tabular-classification', 'tabular-regression', 'time-series-forecasting',
+        'reinforcement-learning', 'robotics'
+    ]
+    return tag in classification_tags
 
 # --- Main ---
 try:
-    health = api_get("/health")
-    if health.get("status") != "ok":
-        st.error(f"API unhealthy")
-        st.stop()
+    requests.get(f"{API_URL}/health", timeout=10).json()
 except Exception as e:
     st.error(f"Cannot connect to API at {API_URL}: {e}")
     st.stop()
 
 if page == "Overview":
     st.title("📊 Database Overview")
-    
-    stats = api_get("/stats")
-    progress = api_post("/sql", {"query": "SELECT COUNT(*) as cnt FROM models_list WHERE created_at > datetime '2024-01-01'"}).get("rows", [[0]])
-    
-    col1, col2, col3, col4 = st.columns(4)
+    stats = get_stats()
+    col1, col2, col3 = st.columns(3)
     col1.metric("Models Listed", f"{stats.get('models_list', 0):,}")
     col2.metric("Info Fetched", f"{stats.get('model_info', 0):,}")
     col3.metric("Cards Fetched", f"{stats.get('model_card', 0):,}")
     
-    # Top downloads
-    st.subheader("Top 20 Models by Downloads")
-    top = api_post("/sql", {"query": "SELECT model_id, downloads, pipeline_tag FROM models_list ORDER BY downloads DESC LIMIT 20"}).get("rows", [])
-    if top:
-        df = pd.DataFrame(top)
-        st.dataframe(df, use_container_width=True, hide_index=True)
-
-elif page == "Models by Pipeline":
-    st.title("📦 Models by Pipeline Tag")
+    # Null pipeline tags info
+    tags_data = get_pipeline_tags()
+    null_count = sum(r["cnt"] for r in tags_data.get("rows", []) if r["tag"] == "NULL/Unset")
+    total = sum(r["cnt"] for r in tags_data.get("rows", []))
+    if null_count > 0:
+        st.warning(f"⚠️ {null_count:,} models ({null_count/total*100:.1f}%) have no pipeline_tag set (this is normal for many HF models)")
     
-    tag_data = api_post("/sql", {"query": "SELECT pipeline_tag, COUNT(*) as cnt FROM models_list GROUP BY pipeline_tag ORDER BY cnt DESC"}).get("rows", [])
-    if tag_data:
-        df = pd.DataFrame(tag_data)
+    st.subheader("Top 20 Models by Downloads")
+    top = requests.post(f"{API_URL}/sql", json={"query": "SELECT model_id, downloads, pipeline_tag FROM models_list ORDER BY downloads DESC LIMIT 20"}, timeout=30).json()
+    if top.get('rows'):
+        st.dataframe(pd.DataFrame(top['rows']), use_container_width=True, hide_index=True)
+
+elif page == "Pipeline Tags":
+    st.title("📦 Models by Pipeline Tag")
+    tags_data = get_pipeline_tags()
+    rows = tags_data.get("rows", [])
+    if rows:
+        df = pd.DataFrame(rows)
+        df.columns = ["Pipeline Tag", "Count"]
+        st.bar_chart(df.set_index("Pipeline Tag")["Count"])
         
-        # Show bar chart
-        st.bar_chart(df.set_index("pipeline_tag")["cnt"])
-        
-        # Show models per tag
-        for _, row in df.iterrows():
-            tag = row["pipeline_tag"]
-            count = row["cnt"]
-            with st.expander(f"**{tag}** ({count:,} models)"):
-                models = api_post("/sql", {"query": f"SELECT model_id, downloads FROM models_list WHERE pipeline_tag = '{tag}' ORDER BY downloads DESC LIMIT 100"}).get("rows", [])
-                if models:
-                    mdf = pd.DataFrame(models)
+        st.subheader("Models by Tag")
+        selected_tag = st.selectbox("Select a pipeline tag to view models:", [r["tag"] for r in rows])
+        if selected_tag:
+            with st.spinner(f"Loading models for {selected_tag}..."):
+                if selected_tag == "NULL/Unset":
+                    where_clause = "pipeline_tag IS NULL"
+                else:
+                    where_clause = f"pipeline_tag = '{selected_tag}'"
+                models = requests.post(f"{API_URL}/sql", json={
+                    "query": f"SELECT model_id, author, downloads, likes, created_at FROM models_list WHERE {where_clause} ORDER BY downloads DESC LIMIT 200"
+                }, timeout=30).json()
+                if models.get('rows'):
+                    mdf = pd.DataFrame(models['rows'])
                     st.dataframe(mdf, use_container_width=True, hide_index=True)
 
 elif page == "Model Search":
     st.title("🔍 Model Search")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        search = st.text_input("Search model ID", "")
-    with col2:
-        tag_filter = st.selectbox("Filter by pipeline tag", ["All"] + [r["pipeline_tag"] for r in api_post("/sql", {"query": "SELECT DISTINCT pipeline_tag FROM models_list WHERE pipeline_tag IS NOT NULL ORDER BY pipeline_tag"}).get("rows", [])])
-    
+    search = st.text_input("Search model ID", "")
     limit = st.slider("Results per page", 50, 500, 100)
     
     query = "SELECT model_id, author, downloads, likes, pipeline_tag, created_at FROM models_list WHERE 1=1"
-    params = []
     if search:
-        query += " AND model_id LIKE ?"
-        params.append(f"%{search}%")
-    if tag_filter != "All":
-        query += " AND pipeline_tag = ?"
-        params.append(tag_filter)
+        query += f" AND model_id LIKE '%{search}%'"
     query += f" ORDER BY downloads DESC LIMIT {limit}"
     
-    if params:
-        models = api_post("/sql", {"query": query}).get("rows", [])
-    else:
-        models = api_post("/sql", {"query": query}).get("rows", [])
+    with st.spinner("Searching..."):
+        models = requests.post(f"{API_URL}/sql", json={"query": query}, timeout=30).json()
     
-    if models:
-        df = pd.DataFrame(models)
+    if models.get('rows'):
+        df = pd.DataFrame(models['rows'])
         st.dataframe(df, use_container_width=True, hide_index=True)
     else:
         st.info("No models found")
@@ -105,21 +113,19 @@ elif page == "Model Info":
     st.title("ℹ️ Model Info")
     model_id = st.text_input("Enter model ID", "albert/albert-base-v2")
     if model_id:
-        resp = api_get(f"/model/{model_id}")
+        resp = requests.get(f"{API_URL}/model/{model_id}", timeout=10).json()
         if "error" not in resp:
             col1, col2 = st.columns(2)
             with col1:
-                st.subheader("Basic Info")
                 st.write(f"**ID:** {resp.get('model_id')}")
                 st.write(f"**SHA:** {resp.get('sha')}")
                 st.write(f"**Gated:** {resp.get('gated')}")
                 st.write(f"**Disabled:** {resp.get('disabled')}")
-                st.write(f"**Storage:** {resp.get('used_storage', 0):,} bytes")
             with col2:
-                st.subheader("Card Data")
-                st.json(resp.get("card_data", {}))
-            st.subheader("Config")
-            st.json(resp.get("config", {}))
+                st.write(f"**Storage:** {resp.get('used_storage', 0):,} bytes")
+                st.write(f"**Fetched:** {resp.get('fetched_at')}")
+            st.subheader("Card Data")
+            st.json(resp.get("card_data", {}))
         else:
             st.warning(f"No info found for {model_id}")
 
@@ -127,7 +133,7 @@ elif page == "Model Cards":
     st.title("📝 Model Cards")
     model_id = st.text_input("Enter model ID", "albert/albert-base-v2")
     if model_id:
-        resp = api_get(f"/cards/{model_id}")
+        resp = requests.get(f"{API_URL}/cards/{model_id}", timeout=10).json()
         if "error" not in resp:
             tab1, tab2 = st.tabs(["README", "YAML Metadata"])
             with tab1:
@@ -141,9 +147,9 @@ elif page == "Raw SQL":
     st.title("🗄️ Raw SQL Query")
     query = st.text_area("SQL", "SELECT model_id, downloads FROM models_list ORDER BY downloads DESC LIMIT 10", height=150)
     if st.button("Run"):
-        resp = api_post("/sql", {"query": query})
+        resp = requests.post(f"{API_URL}/sql", json={"query": query}, timeout=30).json()
         if resp.get('error'):
             st.error(resp['error'])
         else:
             df = pd.DataFrame(resp.get('rows', []), columns=resp.get('columns', []))
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df, use_container_width=True, hide_index=True)
