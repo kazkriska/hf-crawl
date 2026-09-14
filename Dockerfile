@@ -15,9 +15,6 @@ WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy web UI requirements
-COPY hf-crawl-web/requirements.txt /app/web-requirements.txt
-RUN pip install --no-cache-dir -r web-requirements.txt
 
 # Copy source code
 COPY src/ /app/src/
@@ -29,8 +26,6 @@ COPY hf_crawl_alerts.yml /app/hf_crawl_alerts.yml
 COPY README.md /app/README.md
 COPY ACTION_PLAN.md /app/ACTION_PLAN.md
 
-# Copy web UI
-COPY hf-crawl-web/app.py /app/web/app.py
 
 # Create data and logs directories
 RUN mkdir -p /app/data/dev /app/data/prod /app/logs

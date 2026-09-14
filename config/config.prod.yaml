@@ -8,8 +8,8 @@ huggingface:
   page_size: 1000
 
 rate_limiting:
-  max_requests_per_second: 3
-  max_concurrent_requests: 5
+  max_requests_per_second: 8
+  max_concurrent_requests: 15
   max_retries: 5
   backoff_base_seconds: 1.0
   backoff_max_seconds: 60.0
