@@ -13,7 +13,6 @@ services:
       - HF_CRAWL_ENV=${HF_CRAWL_ENV:-dev}
       - HF_CRAWL_MAX_ITEMS=${HF_CRAWL_MAX_ITEMS:-}
       - HF_CRAWL_WEB_PORT=8501
-      - QUERY_PORT=8001
       - MONITORING_PUSHGATEWAY_HOST=${MONITORING_PUSHGATEWAY_HOST:-192.168.1.11}
       - MONITORING_PUSHGATEWAY_PORT=${MONITORING_PUSHGATEWAY_PORT:-9091}
       - MONITORING_LOKI_HOST=${MONITORING_LOKI_HOST:-192.168.1.11}
@@ -24,6 +23,8 @@ services:
     volumes:
       - hf-crawl-data:/app/data
       - hf-crawl-logs:/app/logs
+      # Mount web UI so updates don't require rebuild
+      - ./hf-crawl-web:/app/web
     ports:
       - "${HF_CRAWL_WEB_PORT:-8501}:8501"
       - "8001:8001"
