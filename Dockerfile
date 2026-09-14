@@ -54,4 +54,4 @@ EXPOSE 8501
 VOLUME ["/app/data", "/app/logs"]
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["--help"]
+CMD ["crawl"]
