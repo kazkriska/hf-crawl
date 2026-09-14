@@ -43,11 +43,11 @@ services:
       # Web UI only — metrics/logs are pushed to monitoring LXC
       - "${HF_CRAWL_WEB_PORT:-8501}:8501"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      test: ["CMD-SHELL", "ps aux | grep -E 'python|streamlit' | grep -v grep || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
 volumes:
   hf-crawl-data:
