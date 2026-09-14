@@ -1,99 +1,146 @@
 import streamlit as st
-import requests
+import duckdb
 import pandas as pd
 import os
 
 st.set_page_config(page_title="HF Crawl Dashboard", page_icon="🤗", layout="wide")
 
 # --- Config ---
-API_URL = os.environ.get("API_URL", "http://localhost:8001")
+ENV = os.environ.get("HF_CRAWL_ENV", "dev")
+DEFAULT_DB_PATH = f"/app/data/{ENV}/model_cards.duckdb"
+DB_PATH = st.sidebar.text_input("Database path", value=os.environ.get("DB_PATH", DEFAULT_DB_PATH))
 
 @st.cache_resource
-def get_session():
-    return requests.Session()
+def get_conn(path):
+    return duckdb.connect(path, read_only=True)
 
 # --- Sidebar ---
 st.sidebar.title("🤗 HF Crawl")
 page = st.sidebar.radio("Page", ["Overview", "Models", "Model Info", "Model Cards", "Raw SQL"])
 
 # --- Main ---
+if not os.path.exists(DB_PATH):
+    st.warning(f"Database not found at `{DB_PATH}`. The crawler may not have run yet, or the path is incorrect.")
+    st.info("To run the web UI with the correct DB path:")
+    st.code("docker compose exec hf-crawl hf-crawl web")
+    st.stop()
+
 try:
-    resp = requests.get(f"{API_URL}/health", timeout=5)
-    if resp.status_code != 200:
-        st.error(f"API unhealthy: {resp.status_code}")
-        st.stop()
+    conn = get_conn(DB_PATH)
 except Exception as e:
-    st.error(f"Cannot connect to API at {API_URL}: {e}")
+    st.error(f"Cannot connect to database: {e}")
     st.stop()
 
 if page == "Overview":
     st.title("📊 Database Overview")
     
-    resp = requests.get(f"{API_URL}/stats", timeout=10).json()
-    
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Models Listed", f"{resp.get('models_list', 0):,}")
-    col2.metric("Info Fetched", f"{resp.get('model_info', 0):,}")
-    col3.metric("Cards Fetched", f"{resp.get('model_card', 0):,}")
+    list_count = conn.execute("SELECT COUNT(*) FROM models_list").fetchone()[0]
+    info_count = conn.execute("SELECT COUNT(*) FROM model_info").fetchone()[0]
+    card_count = conn.execute("SELECT COUNT(*) FROM model_card").fetchone()[0]
+    db_size = os.path.getsize(DB_PATH) / (1024*1024) if os.path.exists(DB_PATH) else 0
+    
+    col1.metric("Models Listed", f"{list_count:,}")
+    col2.metric("Info Fetched", f"{info_count:,}")
+    col3.metric("Cards Fetched", f"{card_count:,}")
+    col4.metric("DB Size", f"{db_size:.1f} MB")
     
     st.subheader("Pipeline Tag Distribution")
-    sql_resp = requests.post(f"{API_URL}/sql", json={"query": "SELECT pipeline_tag, COUNT(*) as cnt FROM models_list GROUP BY pipeline_tag ORDER BY cnt DESC LIMIT 20"}, timeout=10).json()
-    if sql_resp.get('rows'):
-        df = pd.DataFrame(sql_resp['rows'])
-        if not df.empty and 'pipeline_tag' in df.columns:
-            st.bar_chart(df.set_index('pipeline_tag')['cnt'])
+    tags = conn.execute("""
+        SELECT pipeline_tag, COUNT(*) as count 
+        FROM models_list 
+        WHERE pipeline_tag IS NOT NULL
+        GROUP BY pipeline_tag 
+        ORDER BY count DESC
+        LIMIT 20
+    """).fetchdf()
+    if not tags.empty:
+        st.bar_chart(tags.set_index("pipeline_tag"))
+    
+    st.subheader("Top 20 by Downloads")
+    top = conn.execute("""
+        SELECT model_id, downloads, pipeline_tag 
+        FROM models_list 
+        ORDER BY downloads DESC 
+        LIMIT 20
+    """).fetchdf()
+    st.dataframe(top, use_container_width=True)
 
-if page == "Models":
+elif page == "Models":
     st.title("🔍 Models List")
     
     search = st.text_input("Search model ID", "")
-    limit = st.slider("Results per page", 50, 1000, 100)
+    tag_filter = st.selectbox("Filter by pipeline tag", ["All"] + [r[0] for r in conn.execute("SELECT DISTINCT pipeline_tag FROM models_list WHERE pipeline_tag IS NOT NULL ORDER BY pipeline_tag").fetchall()])
     
-    params = {"limit": limit}
+    query = "SELECT model_id, author, downloads, likes, pipeline_tag, library_name, created_at FROM models_list WHERE 1=1"
+    params = []
     if search:
-        params["search"] = search
+        query += " AND model_id LIKE ?"
+        params.append(f"%{search}%")
+    if tag_filter != "All":
+        query += " AND pipeline_tag = ?"
+        params.append(tag_filter)
+    query += " ORDER BY downloads DESC LIMIT 1000"
     
-    models = requests.get(f"{API_URL}/models", params=params, timeout=10).json().get("models", [])
-    
-    if models:
-        df = pd.DataFrame(models)
-        st.dataframe(df, use_container_width=True)
-    else:
-        st.info("No models found")
+    df = conn.execute(query, params).fetchdf()
+    st.write(f"Showing {len(df)} rows")
+    st.dataframe(df, use_container_width=True)
 
 elif page == "Model Info":
     st.title("ℹ️ Model Info")
+    
     model_id = st.text_input("Enter model ID", "albert/albert-base-v2")
     if model_id:
-        resp = requests.get(f"{API_URL}/model/{model_id}", timeout=10)
-        if resp.status_code == 200:
-            info = resp.json()
-            st.json(info)
-        else:
+        info = conn.execute("SELECT * FROM model_info WHERE model_id = ?", [model_id]).fetchdf()
+        if info.empty:
             st.warning(f"No info found for {model_id}")
+        else:
+            st.subheader(model_id)
+            row = info.iloc[0]
+            col1, col2, col3 = st.columns(3)
+            col1.metric("SHA", str(row.get("sha", "N/A"))[:12])
+            col2.metric("Gated", row.get("gated", "N/A"))
+            col3.metric("Disabled", row.get("disabled", "N/A"))
+            
+            st.subheader("Card Data")
+            st.json(row.get("card_data", {}))
+            
+            st.subheader("Config")
+            st.json(row.get("config", {}))
+            
+            st.subheader("Siblings")
+            st.json(row.get("siblings", []))
 
 elif page == "Model Cards":
     st.title("📝 Model Cards")
+    
     model_id = st.text_input("Enter model ID", "albert/albert-base-v2")
     if model_id:
-        resp = requests.get(f"{API_URL}/cards/{model_id}", timeout=10)
-        if resp.status_code == 200:
-            card = resp.json()
+        card = conn.execute("SELECT * FROM model_card WHERE model_id = ?", [model_id]).fetchdf()
+        if card.empty:
+            st.warning(f"No card found for {model_id}")
+        else:
+            row = card.iloc[0]
+            st.subheader(model_id)
+            st.metric("README size", f"{row.get('readme_size', 0):,} bytes")
+            
             tab1, tab2 = st.tabs(["README", "YAML Metadata"])
             with tab1:
-                st.markdown(card.get("readme_raw", ""))
+                st.markdown(row.get("readme_raw", ""))
             with tab2:
-                st.json(card.get("yaml_metadata", {}))
-        else:
-            st.warning(f"No card found for {model_id}")
+                st.json(row.get("yaml_metadata", {}))
 
 elif page == "Raw SQL":
     st.title("🗄️ Raw SQL Query")
+    
     query = st.text_area("SQL", "SELECT model_id, downloads FROM models_list ORDER BY downloads DESC LIMIT 10", height=150)
     if st.button("Run"):
-        resp = requests.post(f"{API_URL}/sql", json={"query": query}, timeout=10).json()
-        if resp.get('error'):
-            st.error(resp['error'])
-        else:
-            df = pd.DataFrame(resp.get('rows', []))
-            st.dataframe(df, use_container_width=True)
+        try:
+            result = conn.execute(query).fetchdf()
+            st.dataframe(result, use_container_width=True)
+        except Exception as e:
+            st.error(str(e))
+
+# --- Footer ---
+st.sidebar.markdown("---")
+st.sidebar.caption("HF Crawl Dashboard v1.0")
