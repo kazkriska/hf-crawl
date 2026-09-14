@@ -1,0 +1,3 @@
+#!/bin/bash
+# HF Crawl CLI wrapper for Docker
+exec /app/entrypoint.sh "$@"

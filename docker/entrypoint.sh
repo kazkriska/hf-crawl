@@ -76,8 +76,10 @@ case "$CMD" in
         ;;
 
     web)
-        echo "Starting Web UI on port ${HF_CRAWL_WEB_PORT:-8501}..."
-        exec streamlit run /app/web/app.py --server.port "${HF_CRAWL_WEB_PORT:-8501}" --server.address 0.0.0.0
+        echo "Starting Web UI on port ${HF_CRAWL_WEB_PORT:-8501} in background..."
+        nohup streamlit run /app/web/app.py --server.port "${HF_CRAWL_WEB_PORT:-8501}" --server.address 0.0.0.0 > /app/logs/streamlit.log 2>&1 &
+        echo "Web UI started (PID: $!). Dropping to shell..."
+        exec /bin/bash
         ;;
 
     test)
@@ -110,8 +112,6 @@ COMMANDS:
     list            Run list phase only
     info            Run info phase only
     card            Run card phase only
-    web             Start Streamlit web UI
-    test            Run test suite
     shell           Start interactive bash shell
     version         Show version info
 

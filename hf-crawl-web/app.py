@@ -6,7 +6,9 @@ import os
 st.set_page_config(page_title="HF Crawl Dashboard", page_icon="🤗", layout="wide")
 
 # --- Config ---
-DB_PATH = st.sidebar.text_input("Database path", value="../hf-crawl/data/dev/model_cards.duckdb")
+ENV = os.environ.get("HF_CRAWL_ENV", "dev")
+DEFAULT_DB_PATH = f"/app/data/{ENV}/model_cards.duckdb"
+DB_PATH = st.sidebar.text_input("Database path", value=os.environ.get("DB_PATH", DEFAULT_DB_PATH))
 
 @st.cache_resource
 def get_conn(path):
@@ -17,6 +19,12 @@ st.sidebar.title("🤗 HF Crawl")
 page = st.sidebar.radio("Page", ["Overview", "Models", "Model Info", "Model Cards", "Raw SQL"])
 
 # --- Main ---
+if not os.path.exists(DB_PATH):
+    st.warning(f"Database not found at `{DB_PATH}`. The crawler may not have run yet, or the path is incorrect.")
+    st.info("To run the web UI with the correct DB path:")
+    st.code("docker compose exec hf-crawl hf-crawl web")
+    st.stop()
+
 try:
     conn = get_conn(DB_PATH)
 except Exception as e:
