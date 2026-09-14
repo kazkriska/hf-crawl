@@ -22,7 +22,7 @@ from src.metrics import (
     REQUEST_DURATION_SECONDS,
     BATCH_COMMIT_DURATION_SECONDS,
 )
-from src.monitoring import MetricsPusher, LogShipper
+from src.monitoring import MetricsPusher, LogShipper, RateLimitMonitor
 from src.query_server import QueryServer
 from src.components.fetcher import Fetcher
 from src.components.storage import Storage
@@ -299,6 +299,10 @@ class Orchestrator:
         await self._metrics_pusher.start()
         self._log_shipper = LogShipper(self._config)
         await self._log_shipper.start()
+
+        # Start rate limit monitor
+        self._rate_limit_monitor = RateLimitMonitor(self._config)
+        await self._rate_limit_monitor.start()
 
         # Start query server (for web UI and API access to data)
         self._query_server = QueryServer(self._config, self._storage)

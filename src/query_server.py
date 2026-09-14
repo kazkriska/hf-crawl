@@ -19,8 +19,8 @@ logger = structlog.get_logger(__name__)
 class QueryServer:
     """HTTP API for querying crawl data while crawler is running.
     
-    Uses a single-threaded query queue to serialize all database access,
-    preventing DuckDB lock conflicts with the writer.
+    Uses a single-threaded query queue to serialize all database access
+    through the shared Storage instance, preventing DuckDB lock conflicts.
     """
 
     def __init__(self, config: Config, storage: Storage):
@@ -39,7 +39,7 @@ class QueryServer:
             if self._query_queue:
                 query_id, query_func = self._query_queue.popleft()
                 try:
-                    result = query_func()
+                    result = query_func(self._storage)
                     with self._lock:
                         self._result_cache[query_id] = {"status": "ok", "data": result}
                 except Exception as e:
@@ -103,10 +103,10 @@ class QueryServer:
     async def stats(self, request) -> Any:
         from aiohttp import web
         try:
-            result = self._execute_query(lambda: {
-                "models_list": self._storage.get_list_count(),
-                "model_info": self._storage.get_info_count(),
-                "model_card": self._storage.get_card_count(),
+            result = self._execute_query(lambda storage: {
+                "models_list": storage.get_list_count(),
+                "model_info": storage.get_info_count(),
+                "model_card": storage.get_card_count(),
             })
             return web.json_response(result)
         except Exception as e:
@@ -120,7 +120,7 @@ class QueryServer:
             search = request.query.get('search', '')
             tag = request.query.get('tag', '')
             
-            def query():
+            def query(storage):
                 sql = "SELECT model_id, author, downloads, likes, pipeline_tag, created_at FROM models_list WHERE 1=1"
                 params = []
                 if search:
@@ -132,7 +132,7 @@ class QueryServer:
                 sql += " ORDER BY downloads DESC LIMIT ? OFFSET ?"
                 params.extend([limit, offset])
                 
-                result = self._storage.db.execute(sql, params).fetchall()
+                result = storage.db.execute(sql, params).fetchall()
                 return [{"model_id": r[0], "author": r[1], "downloads": r[2], "likes": r[3], "pipeline_tag": r[4], "created_at": r[5]} for r in result]
             
             result = self._execute_query(query)
@@ -145,11 +145,11 @@ class QueryServer:
         try:
             model_id = request.match_info['id']
             
-            def query():
-                result = self._storage.db.execute("SELECT * FROM model_info WHERE model_id = ?", [model_id]).fetchone()
+            def query(storage):
+                result = storage.db.execute("SELECT * FROM model_info WHERE model_id = ?", [model_id]).fetchone()
                 if not result:
                     return None
-                columns = [desc[0] for desc in self._storage.db.description]
+                columns = [desc[0] for desc in storage.db.description]
                 return dict(zip(columns, result))
             
             result = self._execute_query(query)
@@ -164,11 +164,11 @@ class QueryServer:
         try:
             model_id = request.match_info['id']
             
-            def query():
-                result = self._storage.db.execute("SELECT * FROM model_card WHERE model_id = ?", [model_id]).fetchone()
+            def query(storage):
+                result = storage.db.execute("SELECT * FROM model_card WHERE model_id = ?", [model_id]).fetchone()
                 if not result:
                     return None
-                columns = [desc[0] for desc in self._storage.db.description]
+                columns = [desc[0] for desc in storage.db.description]
                 return dict(zip(columns, result))
             
             result = self._execute_query(query)
@@ -186,9 +186,9 @@ class QueryServer:
             if not sql:
                 return web.json_response({"error": "no query"}, status=400)
             
-            def query():
-                result = self._storage.db.execute(sql).fetchall()
-                columns = [desc[0] for desc in self._storage.db.description] if self._storage.db.description else []
+            def query(storage):
+                result = storage.db.execute(sql).fetchall()
+                columns = [desc[0] for desc in storage.db.description] if storage.db.description else []
                 rows = [dict(zip(columns, row)) for row in result]
                 return {"columns": columns, "rows": rows}
             

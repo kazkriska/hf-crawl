@@ -104,6 +104,67 @@ class MetricsPusher:
             logger.error("push_to_gateway_error", error=str(e), pushgateway=self._pushgateway_url)
 
 
+class RateLimitMonitor:
+    """Monitors HF API rate limit and logs it periodically."""
+
+    def __init__(self, config: Config):
+        self._config = config
+        self._interval = 10  # seconds
+        self._task: asyncio.Task | None = None
+
+    async def start(self):
+        self._task = asyncio.create_task(self._run())
+        logger.info("rate_limit_monitor_started", interval=self._interval)
+
+    async def stop(self):
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+
+    async def _run(self):
+        import httpx
+        import yaml
+
+        while True:
+            try:
+                with open("/app/config/config.prod.yaml") as f:
+                    config = yaml.safe_load(f)
+                token = config.get("huggingface", {}).get("token", "")
+
+                headers = {
+                    "Authorization": f"Bearer {token}"
+                } if token else {}
+
+                async with httpx.AsyncClient(base_url="https://huggingface.co", headers=headers) as client:
+                    resp = await client.get("/api/models?limit=1")
+
+                    status = resp.status_code
+                    ratelimit = resp.headers.get("ratelimit", "N/A")
+                    remaining = ratelimit.split(";")[1].split("=")[1] if ";" in ratelimit and "=" in ratelimit else "N/A"
+                    reset_time = ratelimit.split(";")[2].split("=")[1] if ";" in ratelimit and len(ratelimit.split(";")) > 2 else "N/A"
+
+                    logger.info("rate_limit_check",
+                        status=status,
+                        remaining=remaining,
+                        reset_in_seconds=reset_time,
+                        ratelimit_header=ratelimit
+                    )
+
+                    # Also log to stdout/stderr for Docker logs
+                    print(f"[RATE LIMIT] Status: {status} | Remaining: {remaining} | Reset in: {reset_time}s | Raw: {ratelimit}", flush=True)
+
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                logger.error("rate_limit_check_error", error=str(e))
+                print(f"[RATE LIMIT ERROR] {e}", flush=True)
+
+            await asyncio.sleep(self._interval)
+
+
 class LogShipper:
     """Ships structured logs directly to Loki on the monitoring LXC."""
 
