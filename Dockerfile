@@ -35,10 +35,9 @@ COPY hf-crawl-web/app.py /app/web/app.py
 # Create data and logs directories
 RUN mkdir -p /app/data/dev /app/data/prod /app/logs
 
-# Copy entrypoint and CLI wrapper
+# Copy entrypoint
 COPY docker/entrypoint.sh /app/entrypoint.sh
-COPY docker/hf-crawl /usr/local/bin/hf-crawl
-RUN chmod +x /app/entrypoint.sh /usr/local/bin/hf-crawl
+RUN chmod +x /app/entrypoint.sh
 
 # Environment variables with defaults
 ENV HF_TOKEN=""
