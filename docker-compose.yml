@@ -1,9 +1,12 @@
 version: "3.8"
 
-# HF Crawl — Plug-n-Play Docker Compose
+# HF Crawl — All-in-One Docker Compose
+# Includes: crawler, web UI, and direct push to monitoring LXC.
+# No exporters needed — metrics and logs are pushed directly.
+#
 # Usage:
 #   HF_TOKEN=hf_xxx docker compose up -d
-#   docker compose logs -f hf-crawl
+#   docker compose logs -f
 #   docker compose exec hf-crawl hf-crawl web
 #   docker compose exec hf-crawl hf-crawl shell
 
@@ -16,11 +19,20 @@ services:
     container_name: hf-crawl
     restart: unless-stopped
     environment:
+      # Hugging Face
       - HF_TOKEN=${HF_TOKEN:-}
       - HF_CRAWL_ENV=${HF_CRAWL_ENV:-dev}
       - HF_CRAWL_MAX_ITEMS=${HF_CRAWL_MAX_ITEMS:-}
-      - HF_CRAWL_PORT=8000
       - HF_CRAWL_WEB_PORT=8501
+
+      # Monitoring endpoints (Pushgateway + Loki on monitoring LXC)
+      - MONITORING_PUSHGATEWAY_HOST=${MONITORING_PUSHGATEWAY_HOST:-192.168.1.11}
+      - MONITORING_PUSHGATEWAY_PORT=${MONITORING_PUSHGATEWAY_PORT:-9091}
+      - MONITORING_LOKI_HOST=${MONITORING_LOKI_HOST:-192.168.1.11}
+      - MONITORING_LOKI_PORT=${MONITORING_LOKI_PORT:-3100}
+      - MONITORING_JOB_NAME=${MONITORING_JOB_NAME:-hf-crawl}
+      - MONITORING_INSTANCE_NAME=${MONITORING_INSTANCE_NAME:-dev}
+      - MONITORING_PUSH_INTERVAL=${MONITORING_PUSH_INTERVAL:-30}
     volumes:
       # Data persistence
       - hf-crawl-data:/app/data
@@ -28,15 +40,14 @@ services:
       # Optional: mount a custom config
       # - ./custom-config.yaml:/app/config/config.dev.yaml:ro
     ports:
-      - "${HF_CRAWL_METRICS_PORT:-8000}:8000"  # Prometheus metrics
-      - "${HF_CRAWL_WEB_PORT:-8501}:8501"       # Web UI
+      # Web UI only — metrics/logs are pushed to monitoring LXC
+      - "${HF_CRAWL_WEB_PORT:-8501}:8501"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/metrics"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-    # Resource limits (adjust as needed)
     deploy:
       resources:
         limits:
@@ -45,11 +56,6 @@ services:
         reservations:
           memory: 512M
           cpus: '0.5'
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "3"
 
 volumes:
   hf-crawl-data:
