@@ -26,6 +26,13 @@ def parse_model_list(raw: Any, page: int, cursor: str | None) -> list[dict[str, 
         model_id = item.get("id") or item.get("modelId")
         if not model_id:
             continue
+        
+        # Get pipeline_tag - infer from tags if not explicitly set
+        pipeline_tag = item.get("pipeline_tag") or item.get("pipelineTag")
+        if not pipeline_tag:
+            tags = item.get("tags", [])
+            pipeline_tag = _infer_pipeline_tag(tags)
+        
         records.append({
             "model_id": model_id,
             "author": item.get("author"),
@@ -35,7 +42,7 @@ def parse_model_list(raw: Any, page: int, cursor: str | None) -> list[dict[str, 
             "downloads_all_time": item.get("downloadsAllTime", 0),
             "likes": item.get("likes", 0),
             "trending_score": item.get("trendingScore"),
-            "pipeline_tag": item.get("pipeline_tag") or item.get("pipelineTag"),
+            "pipeline_tag": pipeline_tag,
             "library_name": item.get("library_name") or item.get("libraryName"),
             "tags": _parse_tags(item.get("tags", [])),
             "etag": item.get("etag", ""),
@@ -45,6 +52,53 @@ def parse_model_list(raw: Any, page: int, cursor: str | None) -> list[dict[str, 
             "fetch_status": "success",
         })
     return records
+
+
+def _infer_pipeline_tag(tags: list[str]) -> str | None:
+    """Infer pipeline_tag from tags list when not explicitly set by HF."""
+    if not tags:
+        return None
+    
+    tag_mapping = {
+        "text-classification": "text-classification",
+        "image-classification": "image-classification",
+        "audio-classification": "audio-classification",
+        "video-classification": "video-classification",
+        "token-classification": "token-classification",
+        "sentence-similarity": "sentence-similarity",
+        "object-detection": "object-detection",
+        "image-segmentation": "image-segmentation",
+        "semantic-segmentation": "semantic-segmentation",
+        "instance-segmentation": "instance-segmentation",
+        "panoptic-segmentation": "panoptic-segmentation",
+        "depth-estimation": "depth-estimation",
+        "image-to-text": "image-to-text",
+        "text-to-image": "text-to-image",
+        "text-to-video": "text-to-video",
+        "image-to-image": "image-to-image",
+        "text-generation": "text-generation",
+        "text2text-generation": "text2text-generation",
+        "translation": "translation",
+        "summarization": "summarization",
+        "conversational": "conversational",
+        "question-answering": "question-answering",
+        "fill-mask": "fill-mask",
+        "text-to-speech": "text-to-speech",
+        "automatic-speech-recognition": "automatic-speech-recognition",
+        "audio-to-audio": "audio-to-audio",
+        "voice-activity-detection": "voice-activity-detection",
+        "tabular-classification": "tabular-classification",
+        "tabular-regression": "tabular-regression",
+        "time-series-forecasting": "time-series-forecasting",
+        "reinforcement-learning": "reinforcement-learning",
+        "robotics": "robotics",
+    }
+    
+    for tag in tags:
+        if tag in tag_mapping:
+            return tag_mapping[tag]
+    
+    return None
 
 
 def parse_model_info(raw: dict[str, Any]) -> dict[str, Any] | None:
