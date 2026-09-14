@@ -41,7 +41,8 @@ RUN chmod +x /app/entrypoint.sh
 
 # Environment variables with defaults
 ENV HF_TOKEN=""
-ENV HF_CRAWL_CONFIG=/app/config/config.dev.yaml
+# HF_CRAWL_CONFIG is derived from HF_CRAWL_ENV in entrypoint.sh
+# Do not hardcode it here so env-based config selection works
 ENV HF_CRAWL_WEB_PORT=8501
 ENV HF_CRAWL_ENV=dev
 ENV HF_CRAWL_MAX_ITEMS=""
