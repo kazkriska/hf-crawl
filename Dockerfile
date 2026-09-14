@@ -49,7 +49,7 @@ ENV HF_CRAWL_MAX_ITEMS=""
 
 # Expose ports
 # 8501 = Web UI (Streamlit)
-EXPOSE 8501
+EXPOSE 8501 8001
 
 # Volume for data persistence
 VOLUME ["/app/data", "/app/logs"]
