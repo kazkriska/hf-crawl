@@ -1,5 +1,5 @@
 # HF Crawl — All-in-one container
-# Includes: crawler, web UI (Streamlit), Prometheus metrics
+# Includes: crawler, web UI (Streamlit)
 
 FROM python:3.12-slim
 
@@ -23,15 +23,13 @@ RUN pip install --no-cache-dir -r web-requirements.txt
 COPY src/ /app/src/
 COPY config/ /app/config/
 COPY tests/ /app/tests/
-COPY logs/ /app/logs/
 COPY grafana/ /app/grafana/
 COPY prometheus.yml /app/prometheus.yml
 COPY hf_crawl_alerts.yml /app/hf_crawl_alerts.yml
-COPY promtail.yml /app/promtail.yml
 COPY README.md /app/README.md
 COPY ACTION_PLAN.md /app/ACTION_PLAN.md
 
-# Copy web UI (now inside the project)
+# Copy web UI
 COPY hf-crawl-web/app.py /app/web/app.py
 
 # Create data and logs directories
@@ -45,15 +43,13 @@ RUN chmod +x /app/entrypoint.sh /usr/local/bin/hf-crawl
 # Environment variables with defaults
 ENV HF_TOKEN=""
 ENV HF_CRAWL_CONFIG=/app/config/config.dev.yaml
-ENV HF_CRAWL_PORT=8000
 ENV HF_CRAWL_WEB_PORT=8501
 ENV HF_CRAWL_ENV=dev
 ENV HF_CRAWL_MAX_ITEMS=""
 
 # Expose ports
-# 8000 = Prometheus metrics
-# 8501 = Web UI
-EXPOSE 8000 8501
+# 8501 = Web UI (Streamlit)
+EXPOSE 8501
 
 # Volume for data persistence
 VOLUME ["/app/data", "/app/logs"]
