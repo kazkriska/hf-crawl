@@ -47,16 +47,18 @@ class Storage:
 
     def start(self) -> None:
         os.makedirs(os.path.dirname(self._config.storage.duckdb_path), exist_ok=True)
-        # Clean stale WAL file (happens when container restarts without clean shutdown)
-        # DuckDB creates a WAL file for transactions; if the process dies, the lock persists
-        wal_path = self._config.storage.duckdb_path + ".wal"
-        if os.path.exists(wal_path):
-            try:
-                os.remove(wal_path)
-                logger.info("removed_stale_wal", path=wal_path)
-            except OSError as e:
-                logger.warning("wal_remove_failed", path=wal_path, error=str(e))
-        self._db = duckdb.connect(self._config.storage.duckdb_path)
+        db_path = self._config.storage.duckdb_path
+        # Clean stale lock files from previous crashed container
+        # DuckDB creates .wal and .lock files; if container crashes, these persist
+        for suffix in [".wal", ".lock"]:
+            stale_path = db_path + suffix
+            if os.path.exists(stale_path):
+                try:
+                    os.remove(stale_path)
+                    logger.info("removed_stale_file", path=stale_path)
+                except OSError as e:
+                    logger.warning("stale_file_remove_failed", path=stale_path, error=str(e))
+        self._db = duckdb.connect(db_path)
         self._create_tables()
         self._update_disk_metrics()
 
