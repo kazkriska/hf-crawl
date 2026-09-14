@@ -36,8 +36,6 @@ class Storage:
         self._db: duckdb.DuckDBPyConnection | None = None
         self._archive_dir = Path(config.storage.jsonl_archive_dir)
         self._archive_dir.mkdir(parents=True, exist_ok=True)
-        self._batch: list[dict[str, Any]] = []
-        self._batch_size = 1000
 
     @property
     def db(self) -> duckdb.DuckDBPyConnection:
@@ -45,27 +43,45 @@ class Storage:
             raise RuntimeError("Storage not initialized — call .start() first")
         return self._db
 
+    def _cleanup_stale_wal(self) -> None:
+        """Remove stale WAL file from a previous crashed run."""
+        wal_path = self._config.storage.duckdb_path + ".wal"
+        if os.path.exists(wal_path):
+            try:
+                os.remove(wal_path)
+                logger.info("removed_stale_wal", path=wal_path)
+            except OSError as e:
+                logger.warning("wal_remove_failed", path=wal_path, error=str(e))
+
     def start(self) -> None:
         if self._db is not None:
             return  # Already initialized
         os.makedirs(os.path.dirname(self._config.storage.duckdb_path), exist_ok=True)
-        db_path = self._config.storage.duckdb_path
-        # Clean stale lock files from previous crashed container
-        for suffix in [".wal", ".lock"]:
-            stale_path = db_path + suffix
-            if os.path.exists(stale_path):
+        # Clean stale WAL from a previous crashed container
+        self._cleanup_stale_wal()
+        try:
+            self._db = duckdb.connect(self._config.storage.duckdb_path)
+            self._create_tables()
+            self._update_disk_metrics()
+        except Exception:
+            # Ensure clean state on failure so retry doesn't hit "already initialized"
+            if self._db is not None:
                 try:
-                    os.remove(stale_path)
-                    logger.info("removed_stale_file", path=stale_path)
-                except OSError as e:
-                    logger.warning("stale_file_remove_failed", path=stale_path, error=str(e))
-        self._db = duckdb.connect(db_path, config={'access_mode': 'read_write'})
-        self._create_tables()
-        self._update_disk_metrics()
+                    self._db.close()
+                except Exception:
+                    pass
+                self._db = None
+            raise
 
     def close(self) -> None:
-        if self._db:
-            self._db.close()
+        if self._db is not None:
+            try:
+                self._db.close()
+            except Exception:
+                pass
+            self._db = None
+        # Clean up any WAL file created during this session
+        self._cleanup_stale_wal()
 
     def _create_tables(self) -> None:
         """Create schema if not exists."""
