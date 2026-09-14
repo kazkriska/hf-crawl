@@ -23,6 +23,12 @@ from src.metrics import (
     BATCH_COMMIT_DURATION_SECONDS,
 )
 from src.monitoring import MetricsPusher, LogShipper
+from src.components.fetcher import Fetcher
+from src.components.storage import Storage
+from src.components.checkpoint import CheckpointManager
+from src.phases.phase1_list import Phase1ListModelFetcher
+from src.phases.phase2_info import Phase2ModelInfoFetcher
+from src.phases.phase3_card import Phase3ModelCardFetcher
 
 logger = structlog.get_logger(__name__)
 

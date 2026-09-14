@@ -1,5 +1,5 @@
 # Prometheus scrape configuration for HF Crawl
-# Add this to your existing prometheus.yml on the monitoring LXC (10.1.1.20)
+# Add this to your existing prometheus.yml on the monitoring LXC (10.1.1.20:9090)
 
 global:
   scrape_interval: 15s
