@@ -41,6 +41,7 @@
       "type": "gauge",
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "hf_crawl_rate_limit_remaining",
           "legendFormat": "{{bucket}}",
           "refId": "A"
@@ -78,6 +79,7 @@
       "type": "stat",
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "sum(hf_crawl_active_workers)",
           "refId": "A"
         }
@@ -94,8 +96,23 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
             "lineWidth": 2,
-            "fillOpacity": 10
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
           }
         }
       },
@@ -109,6 +126,7 @@
       "type": "timeseries",
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "increase(hf_crawl_models_fetched_total[5m])",
           "legendFormat": "{{phase}} - {{status}}",
           "refId": "A"
@@ -126,8 +144,23 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
             "lineWidth": 2,
-            "fillOpacity": 10
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
           },
           "unit": "req/s"
         }
@@ -142,6 +175,7 @@
       "type": "timeseries",
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "rate(hf_crawl_requests_total[5m])",
           "legendFormat": "{{endpoint}} - {{status_code}}",
           "refId": "A"
@@ -159,8 +193,23 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
             "lineWidth": 2,
-            "fillOpacity": 10
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
           }
         }
       },
@@ -174,6 +223,7 @@
       "type": "timeseries",
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "hf_crawl_db_size_bytes",
           "refId": "A",
           "legendFormat": "{{instance}}"
@@ -191,8 +241,23 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
             "lineWidth": 2,
-            "fillOpacity": 10
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
           }
         }
       },
@@ -206,6 +271,7 @@
       "type": "timeseries",
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "rate(hf_crawl_rate_limit_hits_total[5m])",
           "legendFormat": "{{endpoint}}",
           "refId": "A"
@@ -218,7 +284,22 @@
   "style": "dark",
   "tags": ["hf-crawl"],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Data Source",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      }
+    ]
   },
   "time": {
     "from": "now-1h",
