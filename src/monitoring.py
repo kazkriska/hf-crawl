@@ -14,6 +14,8 @@ from src.metrics import (
     PHASE_STATUS,
     ACTIVE_WORKERS,
     LIST_COUNT,
+    INFO_COUNT,
+    CARD_COUNT,
     THROUGHPUT_MODELS_PER_SECOND,
     DB_SIZE_BYTES,
     DISK_FREE_BYTES,
