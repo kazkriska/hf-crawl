@@ -317,8 +317,12 @@ class Orchestrator:
                     if list_total:
                         phase1_progress = self._phase_governor.get_progress("list") if self._phase_governor else 0
                         PHASE_PROGRESS_PCT.labels(phase="list").set(phase1_progress)
-                        PHASE_PROGRESS_PCT.labels(phase="info").set((info_count / list_total) * 100)
-                        PHASE_PROGRESS_PCT.labels(phase="card").set((card_count / list_total) * 100)
+                        
+                        # Only set phase 2/3 progress if they have data or are running
+                        if info_count > 0 or (self._phase_governor and self._phase_governor.get_state("info") != PhaseState.PENDING):
+                            PHASE_PROGRESS_PCT.labels(phase="info").set((info_count / list_total) * 100)
+                        if card_count > 0 or (self._phase_governor and self._phase_governor.get_state("card") != PhaseState.PENDING):
+                            PHASE_PROGRESS_PCT.labels(phase="card").set((card_count / list_total) * 100)
                 
                 # Update phase status
                 if self._phase_governor:
