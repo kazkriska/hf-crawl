@@ -24,8 +24,15 @@ from src.metrics import (
     REQUESTS_TOTAL,
     REQUEST_DURATION_SECONDS,
     BATCH_COMMIT_DURATION_SECONDS,
+    MEDIAN_REQUESTS_PER_MINUTE,
+    STDDEV_REQUESTS_PER_MINUTE,
+    MEDIAN_RATE_LIMIT_EFFICIENCY,
+    STDDEV_RATE_LIMIT_EFFICIENCY,
+    PHASE_RUNTIME_SECONDS,
+    PHASE_ETA_SECONDS,
 )
 from src.monitoring import MetricsPusher, LogShipper, RateLimitMonitor
+from src.aggregator import AggregationEngine
 from src.query_server import QueryServer
 from src.components.fetcher import Fetcher
 from src.components.storage import Storage
@@ -272,8 +279,11 @@ class Orchestrator:
         self._health_checker: HealthChecker | None = None
         self._metrics_pusher: MetricsPusher | None = None
         self._log_shipper: LogShipper | None = None
+        self._rate_limit_monitor: RateLimitMonitor | None = None
+        self._aggregation_engine: AggregationEngine | None = None
         self._checkpoints: dict[str, CheckpointManager] = {}
         self._trackers: dict[str, ProgressTracker] = {}
+        self._phase_start_times: dict[str, float] = {}
 
     def _make_checkpoint(self, phase: str) -> CheckpointManager:
         if phase not in self._checkpoints:
@@ -321,6 +331,28 @@ class Orchestrator:
                     ACTIVE_WORKERS.labels(phase=phase_name).set(tracker.active_count if hasattr(tracker, 'active_count') else 0)
                     THROUGHPUT_MODELS_PER_SECOND.labels(phase=phase_name).set(tracker.get_throughput())
                 
+                # Update aggregated gauges
+                if self._aggregation_engine:
+                    aggregates = self._aggregation_engine.get_current_aggregates()
+                    
+                    # Update phase runtime
+                    for phase_name, start_time in self._phase_start_times.items():
+                        elapsed = time.time() - start_time
+                        PHASE_RUNTIME_SECONDS.labels(phase=phase_name).set(elapsed)
+                        
+                        # Calculate ETA for phases 2/3
+                        if phase_name in ["info", "card"] and list_total:
+                            if phase_name == "info":
+                                current_count = info_count
+                            else:
+                                current_count = card_count
+                            
+                            if current_count > 0:
+                                pct = (current_count / list_total) * 100
+                                if pct > 0:
+                                    eta = (elapsed / pct) * (100 - pct)
+                                    PHASE_ETA_SECONDS.labels(phase=phase_name).set(eta)
+                
             except asyncio.CancelledError:
                 return
             except Exception as e:
@@ -347,6 +379,10 @@ class Orchestrator:
         # Start rate limit monitor
         self._rate_limit_monitor = RateLimitMonitor(self._config)
         await self._rate_limit_monitor.start()
+
+        # Start aggregation engine
+        self._aggregation_engine = AggregationEngine(interval_seconds=300)
+        await self._aggregation_engine.start()
 
         # Start query server (for web UI and API access to data)
         self._query_server = QueryServer(self._config, self._storage)
@@ -407,6 +443,7 @@ class Orchestrator:
             logger.info("phase_already_running_resuming", phase=phase_name)
 
         self._phase_governor.set_state(phase_name, PhaseState.RUNNING)
+        self._phase_start_times[phase_name] = time.time()
         logger.info("phase_started", phase=phase_name)
         await self._log_shipper.log("info", f"Phase {phase_name} started")
 

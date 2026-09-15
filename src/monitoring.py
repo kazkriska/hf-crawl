@@ -11,19 +11,25 @@ from src.config import Config
 from src.metrics import (
     MODELS_FETCHED_TOTAL,
     PHASE_PROGRESS_PCT,
-    PHASE_STATUS,
-    ACTIVE_WORKERS,
     LIST_COUNT,
     INFO_COUNT,
     CARD_COUNT,
-    THROUGHPUT_MODELS_PER_SECOND,
+    PHASE_STATUS,
+    RATE_LIMIT_REMAINING,
     DB_SIZE_BYTES,
     DISK_FREE_BYTES,
-    RATE_LIMIT_REMAINING,
-    RATE_LIMIT_HITS_TOTAL,
+    ACTIVE_WORKERS,
+    THROUGHPUT_MODELS_PER_SECOND,
     REQUESTS_TOTAL,
+    RATE_LIMIT_HITS_TOTAL,
     REQUEST_DURATION_SECONDS,
     BATCH_COMMIT_DURATION_SECONDS,
+    MEDIAN_REQUESTS_PER_MINUTE,
+    STDDEV_REQUESTS_PER_MINUTE,
+    MEDIAN_RATE_LIMIT_EFFICIENCY,
+    STDDEV_RATE_LIMIT_EFFICIENCY,
+    PHASE_RUNTIME_SECONDS,
+    PHASE_ETA_SECONDS,
 )
 
 logger = structlog.get_logger(__name__)
@@ -75,7 +81,7 @@ class MetricsPusher:
 
     async def _push_metrics(self) -> None:
         """Push all current metrics to Pushgateway."""
-        from prometheus_client import CollectorRegistry, generate_latest
+        from prometheus_client import CollectorRegistry
 
         registry = CollectorRegistry()
 
@@ -95,6 +101,13 @@ class MetricsPusher:
         registry.register(THROUGHPUT_MODELS_PER_SECOND)
         registry.register(REQUEST_DURATION_SECONDS)
         registry.register(BATCH_COMMIT_DURATION_SECONDS)
+        # Aggregated metrics
+        registry.register(MEDIAN_REQUESTS_PER_MINUTE)
+        registry.register(STDDEV_REQUESTS_PER_MINUTE)
+        registry.register(MEDIAN_RATE_LIMIT_EFFICIENCY)
+        registry.register(STDDEV_RATE_LIMIT_EFFICIENCY)
+        registry.register(PHASE_RUNTIME_SECONDS)
+        registry.register(PHASE_ETA_SECONDS)
 
         # Push to gateway
         try:
