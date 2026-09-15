@@ -197,6 +197,7 @@ class ProgressTracker:
         self._total = total
         self._completed = 0
         self._failed = 0
+        self._active_workers = 0
         self._start_time = time.monotonic()
         self._last_log_time = 0.0
 
@@ -438,6 +439,11 @@ class Orchestrator:
             self._fetcher, self._storage, checkpoint, max_items=max_items
         )
 
+        # Set active workers
+        ACTIVE_WORKERS.labels(phase="list").set(
+            self._config.rate_limiting.max_concurrent_requests
+        )
+
         def get_params(cursor: str | None) -> dict:
             params = {
                 "sort": self._config.huggingface.sort_field,
@@ -451,6 +457,9 @@ class Orchestrator:
         result = await fetcher.run(get_params, self._signal_handler)
         tracker.increment(result[0] if isinstance(result, tuple) else 0)
 
+        # Clear active workers when done
+        ACTIVE_WORKERS.labels(phase="list").set(0)
+        
         self._phase_governor.set_progress("list", 100.0 if not max_items else (total_fetched / max_items) * 100)
         logger.info("phase1_done", total_fetched=tracker.completed, pages=page)
 
@@ -472,8 +481,16 @@ class Orchestrator:
             max_items=self._config.max_items,
         )
 
+        # Set active workers
+        ACTIVE_WORKERS.labels(phase="info").set(
+            self._config.rate_limiting.max_concurrent_requests
+        )
+
         completed, failed = await fetcher.run(pending_ids, self._signal_handler)
         tracker.increment(completed, failed)
+
+        # Clear active workers when done
+        ACTIVE_WORKERS.labels(phase="info").set(0)
 
         self._phase_governor.set_progress("info", tracker.get_progress_pct())
         logger.info("phase2_done", total_fetched=tracker.completed, failed=tracker.failed)
@@ -496,8 +513,16 @@ class Orchestrator:
             max_items=self._config.max_items,
         )
 
+        # Set active workers
+        ACTIVE_WORKERS.labels(phase="card").set(
+            self._config.rate_limiting.max_concurrent_requests
+        )
+
         completed, failed = await fetcher.run(pending_ids, self._signal_handler)
         tracker.increment(completed, failed)
+
+        # Clear active workers when done
+        ACTIVE_WORKERS.labels(phase="card").set(0)
 
         self._phase_governor.set_progress("card", tracker.get_progress_pct())
         logger.info("phase3_done", total_fetched=tracker.completed, failed=tracker.failed)

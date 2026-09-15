@@ -3,8 +3,8 @@ import asyncio
 import json
 import os
 import time
+import uuid
 from collections import deque
-from threading import Lock, Thread
 from typing import Any
 
 import structlog
@@ -19,42 +19,51 @@ logger = structlog.get_logger(__name__)
 class QueryServer:
     """HTTP API for querying crawl data while crawler is running.
     
-    Uses a single-threaded query queue to serialize all database access
-    through the shared Storage instance, preventing DuckDB lock conflicts.
+    Runs queries on the main asyncio event loop to share the DuckDB
+    connection with the crawler without lock conflicts.
     """
 
     def __init__(self, config: Config, storage: Storage):
         self._config = config
         self._storage = storage
-        self._lock = Lock()
-        self._query_queue = deque()
-        self._result_cache = {}
-        self._query_thread = None
-        self._running = False
         self._app = None
+        self._query_queue: deque[tuple[str, Any, asyncio.Future]] = deque()
+        self._running = False
 
-    def _query_worker(self):
-        """Worker thread that processes queries one at a time."""
+    async def _process_queries(self):
+        """Process queries one at a time on the event loop."""
         while self._running:
             if self._query_queue:
-                query_id, query_func = self._query_queue.popleft()
+                query_id, query_func, future = self._query_queue.popleft()
                 try:
                     result = query_func(self._storage)
-                    with self._lock:
-                        self._result_cache[query_id] = {"status": "ok", "data": result}
+                    if not future.done():
+                        future.set_result(result)
                 except Exception as e:
-                    with self._lock:
-                        self._result_cache[query_id] = {"status": "error", "error": str(e)}
-            else:
-                time.sleep(0.1)
+                    if not future.done():
+                        future.set_exception(e)
+            await asyncio.sleep(0.05)
+
+    async def _submit_query(self, query_func, timeout: float = 30.0):
+        """Submit a query and wait for result."""
+        query_id = str(uuid.uuid4())
+        loop = asyncio.get_event_loop()
+        future = loop.create_future()
+        self._query_queue.append((query_id, query_func, future))
+        
+        try:
+            return await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.TimeoutError:
+            raise TimeoutError(f"Query timed out after {timeout}s")
 
     async def start(self, port: int = 8001) -> None:
         """Start the query server."""
         from aiohttp import web
         
         self._running = True
-        self._query_thread = Thread(target=self._query_worker, daemon=True)
-        self._query_thread.start()
+        
+        # Start query processor task
+        asyncio.create_task(self._process_queries())
         
         self._app = web.Application()
         self._setup_routes()
@@ -73,29 +82,6 @@ class QueryServer:
         self._app.router.add_get('/cards/{id}', self.model_card)
         self._app.router.add_post('/sql', self.raw_sql)
 
-    def _execute_query(self, query_func, timeout: float = 30.0):
-        """Submit a query to the queue and wait for result."""
-        import uuid
-        query_id = str(uuid.uuid4())
-        
-        with self._lock:
-            self._result_cache.pop(query_id, None)
-        
-        self._query_queue.append((query_id, query_func))
-        
-        start = time.time()
-        while time.time() - start < timeout:
-            with self._lock:
-                if query_id in self._result_cache:
-                    result = self._result_cache.pop(query_id)
-                    if result["status"] == "ok":
-                        return result["data"]
-                    else:
-                        raise Exception(result["error"])
-            time.sleep(0.05)
-        
-        raise TimeoutError(f"Query timed out after {timeout}s")
-
     async def health(self, request) -> Any:
         from aiohttp import web
         return web.json_response({"status": "ok"})
@@ -103,7 +89,7 @@ class QueryServer:
     async def stats(self, request) -> Any:
         from aiohttp import web
         try:
-            result = self._execute_query(lambda storage: {
+            result = await self._submit_query(lambda storage: {
                 "models_list": storage.get_list_count(),
                 "model_info": storage.get_info_count(),
                 "model_card": storage.get_card_count(),
@@ -135,7 +121,7 @@ class QueryServer:
                 result = storage.db.execute(sql, params).fetchall()
                 return [{"model_id": r[0], "author": r[1], "downloads": r[2], "likes": r[3], "pipeline_tag": r[4], "created_at": r[5]} for r in result]
             
-            result = self._execute_query(query)
+            result = await self._submit_query(query)
             return web.json_response({"models": result, "count": len(result)})
         except Exception as e:
             return web.json_response({"error": str(e)}, status=503)
@@ -152,7 +138,7 @@ class QueryServer:
                 columns = [desc[0] for desc in storage.db.description]
                 return dict(zip(columns, result))
             
-            result = self._execute_query(query)
+            result = await self._submit_query(query)
             if result is None:
                 return web.json_response({"error": "not found"}, status=404)
             return web.json_response(result)
@@ -171,7 +157,7 @@ class QueryServer:
                 columns = [desc[0] for desc in storage.db.description]
                 return dict(zip(columns, result))
             
-            result = self._execute_query(query)
+            result = await self._submit_query(query)
             if result is None:
                 return web.json_response({"error": "not found"}, status=404)
             return web.json_response(result)
@@ -192,7 +178,7 @@ class QueryServer:
                 rows = [dict(zip(columns, row)) for row in result]
                 return {"columns": columns, "rows": rows}
             
-            result = self._execute_query(query)
+            result = await self._submit_query(query)
             return web.json_response(result)
         except Exception as e:
             return web.json_response({"error": str(e)}, status=503)
