@@ -84,260 +84,46 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
           },
-          "min": 0,
-          "max": 100,
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "yellow", "value": 25 },
-              { "color": "green", "value": 100 }
+              { "color": "green", "value": null }
             ]
-          },
-          "unit": "percent"
+          }
         }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "id": 1,
       "options": {
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
-      },
-      "title": "Phase 1: List",
-      "type": "gauge",
-      "targets": [
-        {
-          "expr": "hf_crawl_phase_progress_pct{phase=\"list\"}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "min": 0,
-          "max": 100,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red", "value": null },
-              { "color": "yellow", "value": 25 },
-              { "color": "green", "value": 100 }
-            ]
-          },
-          "unit": "percent"
-        }
-      },
-      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
-      "id": 2,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
-      },
-      "title": "Phase 2: Info",
-      "type": "gauge",
-      "targets": [
-        {
-          "expr": "hf_crawl_phase_progress_pct{phase=\"info\"}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "min": 0,
-          "max": 100,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red", "value": null },
-              { "color": "yellow", "value": 25 },
-              { "color": "green", "value": 100 }
-            ]
-          },
-          "unit": "percent"
-        }
-      },
-      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
-      "id": 3,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
-      },
-      "title": "Phase 3: Card",
-      "type": "gauge",
-      "targets": [
-        {
-          "expr": "hf_crawl_phase_progress_pct{phase=\"card\"}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          }
-        }
-      },
-      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
-      "id": 4,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        }
-      },
-      "title": "Phase Status",
-      "type": "stat",
-      "targets": [
-        {
-          "expr": "hf_crawl_phase_status",
-          "legendFormat": "{{phase}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          },
-          "unit": "models/s"
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
-      "id": 5,
-      "options": {
         "tooltip": { "mode": "multi" },
         "legend": { "displayMode": "list", "placement": "bottom" }
       },
-      "title": "Throughput (models/second)",
-      "type": "timeseries",
-      "targets": [
-        {
-          "expr": "hf_crawl_throughput_models_per_second",
-          "legendFormat": "{{phase}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          }
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
-      "id": 6,
-      "options": {
-        "tooltip": { "mode": "multi" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
-      },
-      "title": "Total Fetched",
+      "title": "Crawl Progress (5min rate)",
       "type": "timeseries",
       "targets": [
         {
           "expr": "increase(hf_crawl_models_fetched_total[5m])",
           "legendFormat": "{{phase}} - {{status}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          },
-          "unit": "req/s"
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
-      "id": 7,
-      "options": {
-        "tooltip": { "mode": "multi" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
-      },
-      "title": "Request Rate by Status Code",
-      "type": "timeseries",
-      "targets": [
-        {
-          "expr": "rate(hf_crawl_requests_total[5m])",
-          "legendFormat": "{{endpoint}} - {{status_code}}",
           "refId": "A"
         }
       ]
@@ -362,8 +148,8 @@
           }
         }
       },
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 12 },
-      "id": 8,
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "id": 2,
       "options": {
         "orientation": "auto",
         "reduceOptions": {
@@ -389,25 +175,28 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "scaleDistribution": { "type": "log" },
-            "hideValue": false
+          "color": {
+            "mode": "palette-classic"
           },
-          "color": { "mode": "spectrum" }
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          },
+          "unit": "req/s"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
-      "id": 9,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 3,
       "options": {
-        "calculate": false,
-        "yAxis": { "axisPlacement": "left", "axisWidth": 60, "unit": "s" }
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
       },
-      "title": "Request Latency Heatmap",
-      "type": "heatmap",
+      "title": "Requests per Second by Endpoint",
+      "type": "timeseries",
       "targets": [
         {
-          "expr": "rate(hf_crawl_request_duration_seconds_bucket[5m])",
-          "legendFormat": "{{le}}",
+          "expr": "rate(hf_crawl_requests_total[5m])",
+          "legendFormat": "{{endpoint}} - {{status_code}}",
           "refId": "A"
         }
       ]
@@ -425,12 +214,11 @@
           "custom": {
             "lineWidth": 2,
             "fillOpacity": 10
-          },
-          "unit": "bytes"
+          }
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
-      "id": 10,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 4,
       "options": {
         "tooltip": { "mode": "multi" },
         "legend": { "displayMode": "list", "placement": "bottom" }
@@ -440,7 +228,8 @@
       "targets": [
         {
           "expr": "hf_crawl_db_size_bytes",
-          "refId": "A"
+          "refId": "A",
+          "legendFormat": "{{instance}}"
         }
       ]
     },
@@ -465,8 +254,8 @@
           "unit": "bytes"
         }
       },
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 28 },
-      "id": 11,
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "id": 5,
       "options": {
         "orientation": "auto",
         "reduceOptions": {
@@ -480,7 +269,8 @@
       "targets": [
         {
           "expr": "hf_crawl_disk_free_bytes",
-          "refId": "A"
+          "refId": "A",
+          "legendFormat": "{{instance}}"
         }
       ]
     },
@@ -500,18 +290,68 @@
           }
         }
       },
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 28 },
-      "id": 12,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "id": 6,
       "options": {
         "tooltip": { "mode": "multi" },
         "legend": { "displayMode": "list", "placement": "bottom" }
       },
-      "title": "Active Workers",
+      "title": "Request Latency (p50/p90/p99)",
       "type": "timeseries",
       "targets": [
         {
-          "expr": "hf_crawl_active_workers",
-          "legendFormat": "{{phase}}",
+          "expr": "histogram_quantile(0.50, rate(hf_crawl_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.90, rate(hf_crawl_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p90",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(hf_crawl_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "orange", "value": 2 },
+              { "color": "red", "value": 3 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 16 },
+      "id": 7,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "title": "Active Workers",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(hf_crawl_active_workers)",
           "refId": "A"
         }
       ]
@@ -532,13 +372,13 @@
           }
         }
       },
-      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 28 },
-      "id": 13,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "id": 8,
       "options": {
         "tooltip": { "mode": "multi" },
         "legend": { "displayMode": "list", "placement": "bottom" }
       },
-      "title": "Error Rate (Rate Limit Hits)",
+      "title": "Error Rate (429s)",
       "type": "timeseries",
       "targets": [
         {
@@ -551,7 +391,8 @@
   ],
   "refresh": "10s",
   "schemaVersion": 38,
-  "tags": ["hf-crawl", "huggingface", "crawl"],
+  "style": "dark",
+  "tags": ["hf-crawl"],
   "templating": {
     "list": []
   },
@@ -560,9 +401,8 @@
     "to": "now"
   },
   "timepicker": {},
-  "timezone": "",
+  "timezone": "Asia/Kolkata",
   "title": "HF Crawl Dashboard",
   "uid": "hf-crawl",
-  "version": 1,
-  "weekStart": ""
+  "version": 1
 }

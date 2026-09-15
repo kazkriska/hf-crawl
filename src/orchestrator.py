@@ -11,6 +11,9 @@ from src.config import Config
 from src.metrics import (
     MODELS_FETCHED_TOTAL,
     PHASE_PROGRESS_PCT,
+    LIST_COUNT,
+    INFO_COUNT,
+    CARD_COUNT,
     PHASE_STATUS,
     ACTIVE_WORKERS,
     THROUGHPUT_MODELS_PER_SECOND,
@@ -283,6 +286,46 @@ class Orchestrator:
             self._trackers[phase] = ProgressTracker(phase, total)
         return self._trackers[phase]
 
+    async def _update_metrics_loop(self):
+        """Periodically update Prometheus gauges."""
+        while True:
+            try:
+                # Update table counts
+                if self._storage:
+                    list_count = self._storage.get_list_count()
+                    info_count = self._storage.get_info_count()
+                    card_count = self._storage.get_card_count()
+                    
+                    LIST_COUNT.set(list_count)
+                    INFO_COUNT.set(info_count)
+                    CARD_COUNT.set(card_count)
+                    
+                    # Update phase progress for phases 2/3 based on list count
+                    list_total = list_count if list_count > 0 else None
+                    
+                    if list_total:
+                        phase1_progress = self._phase_governor.get_progress("list") if self._phase_governor else 0
+                        PHASE_PROGRESS_PCT.labels(phase="list").set(phase1_progress)
+                        PHASE_PROGRESS_PCT.labels(phase="info").set((info_count / list_total) * 100)
+                        PHASE_PROGRESS_PCT.labels(phase="card").set((card_count / list_total) * 100)
+                
+                # Update phase status
+                if self._phase_governor:
+                    for phase_name in ["list", "info", "card"]:
+                        state = self._phase_governor.get_state(phase_name)
+                        PHASE_STATUS.labels(phase=phase_name).set(state.value if hasattr(state, 'value') else int(state))
+                
+                # Update trackers
+                for phase_name, tracker in self._trackers.items():
+                    ACTIVE_WORKERS.labels(phase=phase_name).set(tracker.active_count if hasattr(tracker, 'active_count') else 0)
+                    THROUGHPUT_MODELS_PER_SECOND.labels(phase=phase_name).set(tracker.get_throughput())
+                
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                logger.error("metrics_update_error", error=str(e))
+            await asyncio.sleep(30)
+
     async def run(self, phase: str = "all") -> None:
         """Run the crawl. Phase can be 'all', 'list', 'info', or 'card'."""
         await self._fetcher.start()
@@ -307,6 +350,9 @@ class Orchestrator:
         # Start query server (for web UI and API access to data)
         self._query_server = QueryServer(self._config, self._storage)
         await self._query_server.start(8001)
+
+        # Start periodic metrics update
+        self._metrics_task = asyncio.create_task(self._update_metrics_loop())
 
         # Health check
         healthy, issues = self._health_checker.is_healthy()

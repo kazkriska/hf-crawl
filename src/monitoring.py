@@ -13,6 +13,7 @@ from src.metrics import (
     PHASE_PROGRESS_PCT,
     PHASE_STATUS,
     ACTIVE_WORKERS,
+    LIST_COUNT,
     THROUGHPUT_MODELS_PER_SECOND,
     DB_SIZE_BYTES,
     DISK_FREE_BYTES,
@@ -81,6 +82,9 @@ class MetricsPusher:
         registry.register(REQUESTS_TOTAL)
         registry.register(RATE_LIMIT_HITS_TOTAL)
         registry.register(PHASE_PROGRESS_PCT)
+        registry.register(LIST_COUNT)
+        registry.register(INFO_COUNT)
+        registry.register(CARD_COUNT)
         registry.register(PHASE_STATUS)
         registry.register(RATE_LIMIT_REMAINING)
         registry.register(DB_SIZE_BYTES)

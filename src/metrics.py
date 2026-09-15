@@ -22,8 +22,23 @@ RATE_LIMIT_HITS_TOTAL = Counter(
 # Gauges
 PHASE_PROGRESS_PCT = Gauge(
     'hf_crawl_phase_progress_pct',
-    'Current phase progress percentage',
+    'Phase progress percentage (phase 1: 0-100 if known, phase 2/3: based on list count)',
     ['phase'],
+)
+
+LIST_COUNT = Gauge(
+    'hf_crawl_list_count',
+    'Total models in list table (used as base for phase 2/3 progress)',
+)
+
+INFO_COUNT = Gauge(
+    'hf_crawl_info_count',
+    'Total models in info table',
+)
+
+CARD_COUNT = Gauge(
+    'hf_crawl_card_count',
+    'Total models in card table',
 )
 
 PHASE_STATUS = Gauge(
