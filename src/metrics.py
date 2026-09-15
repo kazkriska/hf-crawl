@@ -19,16 +19,16 @@ RATE_LIMIT_HITS_TOTAL = Counter(
     ['endpoint'],
 )
 
-# Gauges
+# Gauges — Raw metrics
 PHASE_PROGRESS_PCT = Gauge(
     'hf_crawl_phase_progress_pct',
-    'Phase progress percentage (phase 1: 0-100 if known, phase 2/3: based on list count)',
+    'Phase progress percentage',
     ['phase'],
 )
 
 LIST_COUNT = Gauge(
     'hf_crawl_list_count',
-    'Total models in list table (used as base for phase 2/3 progress)',
+    'Total models in list table',
 )
 
 INFO_COUNT = Gauge(
@@ -71,7 +71,44 @@ ACTIVE_WORKERS = Gauge(
 
 THROUGHPUT_MODELS_PER_SECOND = Gauge(
     'hf_crawl_throughput_models_per_second',
-    'Current crawl speed in models per second',
+    'Current crawl speed',
+    ['phase'],
+)
+
+# Gauges — Aggregated metrics (for Grafana)
+MEDIAN_REQUESTS_PER_MINUTE = Gauge(
+    'hf_crawl_median_requests_per_minute',
+    'Median requests/min over last 15 min',
+    ['phase'],
+)
+
+STDDEV_REQUESTS_PER_MINUTE = Gauge(
+    'hf_crawl_stddev_requests_per_minute',
+    'Std dev of requests/min over last 15 min',
+    ['phase'],
+)
+
+MEDIAN_RATE_LIMIT_EFFICIENCY = Gauge(
+    'hf_crawl_median_rate_limit_efficiency',
+    'Median rate limit efficiency over last 12 windows',
+    ['phase'],
+)
+
+STDDEV_RATE_LIMIT_EFFICIENCY = Gauge(
+    'hf_crawl_stddev_rate_limit_efficiency',
+    'Std dev of rate limit efficiency',
+    ['phase'],
+)
+
+PHASE_RUNTIME_SECONDS = Gauge(
+    'hf_crawl_phase_runtime_seconds',
+    'Elapsed time since phase start',
+    ['phase'],
+)
+
+PHASE_ETA_SECONDS = Gauge(
+    'hf_crawl_phase_eta_seconds',
+    'Estimated time to completion',
     ['phase'],
 )
 

@@ -10,15 +10,10 @@
   "liveNow": false,
   "panels": [
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
+          "color": { "mode": "thresholds" },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -50,15 +45,10 @@
       ]
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
+          "color": { "mode": "palette-classic" },
           "custom": {
             "axisLabel": "",
             "axisPlacement": "auto",
@@ -119,15 +109,10 @@
       ]
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
+          "color": { "mode": "palette-classic" },
           "custom": {
             "axisLabel": "",
             "axisPlacement": "auto",
@@ -168,15 +153,10 @@
       ]
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
+          "color": { "mode": "palette-classic" },
           "custom": {
             "axisLabel": "",
             "axisPlacement": "auto",
@@ -222,15 +202,10 @@
       ]
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
+          "color": { "mode": "thresholds" },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -260,15 +235,10 @@
       ]
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
+          "color": { "mode": "thresholds" },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -297,15 +267,10 @@
       ]
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
+          "color": { "mode": "palette-classic" },
           "custom": {
             "axisLabel": "",
             "axisPlacement": "auto",
@@ -345,15 +310,10 @@
       ]
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
+          "color": { "mode": "thresholds" },
           "custom": {
             "axisLabel": "",
             "axisPlacement": "auto",
@@ -462,6 +422,6 @@
   "timepicker": {},
   "timezone": "Asia/Kolkata",
   "title": "HF Crawl Dashboard",
-  "uid": "hf-crawl",
+  "uid": "hf-crawl-v2",
   "version": 1
 }
